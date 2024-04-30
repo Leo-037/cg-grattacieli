@@ -1,0 +1,246 @@
+<!doctype html>
+
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>Skyscrapers</title>
+
+    <style>
+        html,
+        head,
+        body {
+            margin: 0;
+            padding: 25px;
+            background-color: #2a2a2a;
+        }
+
+        #canvas {
+            width: 900px;
+            height: 700px;
+            background-color: #da6052;
+        }
+
+        #info-box {
+            color: #fd8080;
+            font-weight: 500;
+            font-size: 18pt;
+            border: 1px solid white;
+            padding: 25px;
+            margin-top: 20px;
+        }
+
+        .info-box-title {
+            color: #eee;
+            border-bottom: 1px solid gray;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="canvas">
+        <!-- This message shows up only if the Canvas element isn't supported -->
+        HTML5 canvas not supported in your browser!
+    </canvas>
+    <div id="info-box">
+        <span class="info-box-title"></span>
+    </div>
+
+    <!-- SCRIPTS -->
+
+    <script id="simple-texture-vertex-shader-3d" type="x-shader/x-vertex">
+
+        attribute vec4 a_position;
+        attribute vec2 a_texcoord;
+
+        uniform mat4 u_matrix;
+
+        varying vec2 v_texcoord;
+
+        void main() {
+            // Multiply the position by the matrix.
+            gl_Position = u_matrix * a_position;
+
+            v_texcoord = a_texcoord;
+        }
+    </script>
+
+    <script id="simple-texture-fragment-shader-3d" type="x-shader/x-fragment">
+        precision mediump float;
+
+        // Passed in from the vertex shader.
+        varying vec2 v_texcoord;
+
+        uniform sampler2D u_texture;
+
+        void main() {
+            // apply color
+            gl_FragColor = texture2D(u_texture, v_texcoord);
+        }
+    </script>
+
+
+    <!---------------->
+
+   <!-- vertex shader -->
+<script  id="pick-vertex-shader" type="x-shader/x-vertex">
+    attribute vec4 a_position;
+    
+    uniform mat4 u_viewProjection;
+    uniform mat4 u_world;
+    
+    void main() {
+      // Multiply the position by the matrices
+      gl_Position = u_viewProjection * u_world * a_position;
+    }
+  </script>
+  <!-- fragment shader -->
+  <script  id="pick-fragment-shader" type="x-shader/x-fragment">
+    precision mediump float;
+    
+    uniform vec4 u_id;
+    
+    void main() {
+       gl_FragColor = u_id;
+    }
+  </script>
+
+    <!---------------->
+
+    <script id="vertex-shader-3d" type="x-shader/x-vertex">
+
+        attribute vec4 a_position;
+        attribute vec2 a_texcoord;
+        attribute vec4 a_color;
+        attribute vec3 a_normal;
+
+        uniform vec3 u_lightWorldPosition;
+        uniform vec3 u_viewWorldPosition;
+
+        uniform mat4 u_world;
+        uniform mat4 u_worldViewProjection;
+        uniform mat4 u_worldInverseTranspose;
+
+        varying vec4 v_color;
+        varying vec3 v_normal;
+        varying vec2 v_texcoord;
+
+        varying vec3 v_surfaceToLight;
+        varying vec3 v_surfaceToView;
+
+        void main() {
+            // Multiply the position by the matrix.
+            gl_Position = u_worldViewProjection * a_position;
+
+            // orient the normals and pass to the fragment shader
+            v_normal = mat3(u_worldInverseTranspose) * a_normal;
+
+            // compute the world position of the surface
+            vec3 surfaceWorldPosition = (u_world * a_position).xyz;
+ 
+            // compute the vector of the surface to the light and pass it to the fragment shader
+            v_surfaceToLight = u_lightWorldPosition - surfaceWorldPosition;
+              
+            // compute the vector of the surface to the view/camera and pass it to the fragment shader
+            v_surfaceToView = u_viewWorldPosition - surfaceWorldPosition;
+
+            // Pass the vertex color and texture coordinates to the fragment shader.
+            v_color = a_color;
+            v_texcoord = a_texcoord;
+        }
+    </script>
+
+    <script id="fragment-shader-3d" type="x-shader/x-fragment">
+        precision mediump float;
+
+        // Passed in from the vertex shader.
+        varying vec4 v_color;
+        varying vec3 v_normal;
+        varying vec2 v_texcoord;
+        
+        varying vec3 v_surfaceToLight;
+        varying vec3 v_surfaceToView;
+
+        uniform sampler2D u_texture;
+
+        uniform vec3 u_reverseLightDirection;
+        uniform float u_shininess;
+        uniform vec3 u_lightColor;
+        uniform vec3 u_specularColor;
+        uniform vec3 u_lightDirection;
+        uniform float u_innerLimit;     // in dot space
+        uniform float u_outerLimit;     // in dot space
+
+        void main() {
+            // varyings need to be de-interpolated
+            vec3 normal = normalize(v_normal); 
+            vec3 surfaceToLightDirection = normalize(v_surfaceToLight);
+            vec3 surfaceToViewDirection = normalize(v_surfaceToView);
+
+            vec3 halfVector = normalize(surfaceToLightDirection + surfaceToViewDirection);
+
+            // DIRECTIONAL LIGHTING
+            /*float light = dot(normal, u_reverseLightDirection);
+            float specular = 0.0;
+            if (light > 0.0) {
+              specular = pow(dot(normal, halfVector), u_shininess);
+            }*/
+
+            // POINT LIGHTING
+            /*float light = dot(normal, surfaceToLightDirection);
+            float specular = 0.0;
+            if (light > 0.0) {
+              specular = pow(dot(normal, halfVector), u_shininess);
+            }*/
+
+            // SPOT LIGHTING
+            float dotFromDirection = dot(surfaceToLightDirection, -u_lightDirection);
+            // inLight will be 1 if we're inside the spotlight and 0 if not
+            float inLight = smoothstep(u_outerLimit, u_innerLimit, dotFromDirection);
+            float light = inLight * dot(normal, surfaceToLightDirection);
+            float specular = inLight * pow(dot(normal, halfVector), u_shininess);
+            
+            // apply color
+            gl_FragColor = texture2D(u_texture, v_texcoord);
+
+            // Lets multiply just the color portion (not the alpha) by the light
+            // gl_FragColor.rgb *= light * u_lightColor;
+
+            // Add in the specular
+            // gl_FragColor.rgb += specular * u_specularColor;
+        }
+    </script>
+
+    <!------------------>
+
+    <script id="solid-color-vertex-shader" type="x-shader/x-vertex">
+        attribute vec4 a_position;
+
+        uniform mat4 u_matrix;
+
+        void main() {
+            // Multiply the position by the matrix.
+            gl_Position = u_matrix * a_position;
+        }
+    </script>
+
+    <script id="solid-color-fragment-shader" type="x-shader/x-fragment">
+        precision mediump float;
+
+        uniform vec4 u_color;
+
+        void main() {
+            gl_FragColor = u_color;
+        }
+    </script>
+
+    <script src="./resources/webgl-utils.js"></script>
+    <script src="./resources/dat.gui.js"></script>
+    <script src="./resources/m4.js"></script>
+
+    <script src="grattacieli.js" type="module"></script>
+</body>
+
+</html>

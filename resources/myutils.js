@@ -35,7 +35,6 @@ export function loadTexture(gl, url) {
             image,
         );
 
-
         // Only if it's a power of 2 generate mips.
         if (isPowerOf2(image.width) && isPowerOf2(image.height)) {
             gl.generateMipmap(gl.TEXTURE_2D);

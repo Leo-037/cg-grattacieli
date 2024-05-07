@@ -4,9 +4,9 @@ import { cube_colors, cube_indices, cube_normals, cube_vertices, square_indices,
 import { degToRad, getRandomInt, loadTexture } from "./resources/myutils.js"
 
 const numberTextureInfo = {
+    size: 512,
     textureWidth: 512 * 5,
     textureHeight: 512 * 5,
-    size: 512,
     pos: {
         1: { x: 0, y: 0 },
         2: { x: 1, y: 0 },
@@ -21,13 +21,25 @@ const numberTextureInfo = {
     }
 }
 
+const colors = {
+    1: m4.normalize([20, 200, 255]),
+    2: m4.normalize([120, 100, 255]),
+    3: m4.normalize([110, 255, 120]),
+    4: m4.normalize([255, 200, 0]),
+    5: m4.normalize([220, 50, 0]),
+    6: m4.normalize([0, 0, 0]),
+    7: m4.normalize([0, 0, 0]),
+    8: m4.normalize([0, 0, 0]),
+    9: m4.normalize([0, 0, 0]),
+}
+
 function toFixedFloat(n, f) {
     return Math.floor((n * 10 ** f).toFixed(f)) / 10 ** f
 }
 
 function getTextureCoordinatesForNumber(n) {
-    var texcoords = []
     // fill the texture with 1s
+    var texcoords = []
     for (let i = 0; i < 48; i++) {
         texcoords.push(1)
     }
@@ -82,13 +94,26 @@ function main() {
     const orto = {
         cam1Near: 1,
         cam1Far: 500,
-        cam1OrthoUnits: 13,
+        minimapCam1OrthoUnits: 8,
+        selectorCam1OrthoUnits: 15,
     }
-    // var gui = new dat.GUI();
-    // gui.add(settings, 'fov', 0, 180).step(1);
-    // gui.add(orto, 'cam1Near')
-    // gui.add(orto, 'cam1Far')
-    // gui.add(orto, 'cam1OrthoUnits')
+    const light = {
+        x: 0, y: 10, z: 0,
+        mode: 1,
+        Ka: 0.7, Kd: .35, Ks: 0,
+        shininessVal: 80,
+    }
+
+    var gui = new dat.GUI();
+    gui.close();
+    // gui.add(light, 'x')
+    // gui.add(light, 'y')
+    gui.add(orto, 'selectorCam1OrthoUnits')
+    gui.add(light, 'mode').min(1).max(4).step(1)
+    gui.add(light, 'Ka').min(0).max(1).step(.05)
+    gui.add(light, 'Kd').min(0).max(1).step(.05)
+    gui.add(light, 'Ks').min(0).max(1).step(.05)
+    gui.add(light, 'shininessVal').min(0).max(128).step(.1)
 
     const squareBufferInfo = createSquareBufferInfo(gl);
     const grattacieloBufferInfo = createCubeBufferInfo(gl);
@@ -125,6 +150,7 @@ function main() {
             this.x = x;
             this.z = z;
             this.skyscraper = 0;
+            this.selected = false;
         }
     }
 
@@ -153,46 +179,27 @@ function main() {
         }
     }
 
+    const partita = [
+        1, 4, 3, 2, 2,
+        3, 4, 1, 2, 2,
+        4, 2, 1, 2, 3,
+        3, 2, 3, 2, 1 ]
     let numeriAttorno = [];
-    // TODO semplifica
     for (let i = 0; i < settings.dimScacchiera; i++) {
-        var x = (i / (settings.dimScacchiera - 1) - .5) * 2 * (settings.dimScacchiera - 1);
-        numeriAttorno.push(new Number(
-            x,
-            settings.dimScacchiera + 1,
-            getRandomInt(1, settings.dimScacchiera + 1)
-        ));
-    }
-    for (let i = 0; i < settings.dimScacchiera; i++) {
-        var z = (i / (settings.dimScacchiera - 1) - .5) * 2 * (settings.dimScacchiera - 1);
-        numeriAttorno.push(new Number(
-            settings.dimScacchiera + 1,
-            z,
-            getRandomInt(1, settings.dimScacchiera + 1)
-        ));
-    }
-    for (let i = 0; i < settings.dimScacchiera; i++) {
-        var x = (i / (settings.dimScacchiera - 1) - .5) * 2 * (settings.dimScacchiera - 1);
-        numeriAttorno.push(new Number(
-            x,
-            -(settings.dimScacchiera + 1),
-            getRandomInt(1, settings.dimScacchiera + 1)
-        ));
-    }
-    for (let i = 0; i < settings.dimScacchiera; i++) {
-        var z = (i / (settings.dimScacchiera - 1) - .5) * 2 * (settings.dimScacchiera - 1);
-        numeriAttorno.push(new Number(
-            -(settings.dimScacchiera + 1),
-            z,
-            getRandomInt(1, settings.dimScacchiera + 1)
-        ));
+        let d1 = (i / (settings.dimScacchiera - 1) - .5) * 2 * (settings.dimScacchiera - 1);
+        let d2 = settings.dimScacchiera + 1;
+        numeriAttorno.push(new Number(d1, d2, partita[i + 0]));
+        numeriAttorno.push(new Number(d2, d1, partita[i + 1 * settings.dimScacchiera]));
+        numeriAttorno.push(new Number(d1, -d2, partita[i + 2 * settings.dimScacchiera]));
+        numeriAttorno.push(new Number(-d2, d1, partita[i + 3 * settings.dimScacchiera]));
     }
 
     // generate some skyscrapers in random spots
-    for (let i = 0; i < settings.dimScacchiera * 2; i++) {
-    /**@type Square*/let square = scacchiera[Math.floor(Math.random() * scacchiera.length)];;
-        square.skyscraper = getRandomInt(1, settings.dimScacchiera + 1);
-    }
+    // for (let i = 0; i < settings.dimScacchiera * 2; i++) {
+    // /**@type Square*/let square = scacchiera[Math.floor(Math.random() * scacchiera.length)];;
+    //     square.skyscraper = getRandomInt(1, settings.dimScacchiera + 1);
+    // }
+
 
     // computes the camera position as it orbits around the center
     function getCameraPos() {
@@ -203,11 +210,12 @@ function main() {
         return [X, Y, Z]
     }
 
+
     const squareTexture = loadTexture(gl, "./resources/images/square.png")
     const numberTexture = loadTexture(gl, "./resources/images/numbers/allNumbers.png");
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
 
-    // -------- PICKING --------
+    // -------- TEXTURE FOR PICKING --------
 
     // Create a texture to render to
     const targetTexture = gl.createTexture();
@@ -236,7 +244,7 @@ function main() {
         gl.bindRenderbuffer(gl.RENDERBUFFER, depthBuffer);
         gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, width, height);
     }
-    setFramebufferAttachmentSizes(1, 1);
+
 
     // Create and bind the framebuffer
     const fb = gl.createFramebuffer();
@@ -250,8 +258,6 @@ function main() {
     // make a depth buffer and the same size as the targetTexture
     gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depthBuffer);
 
-    let pickingViewProjectionMatrix = m4.identity();
-
 
     function drawObject(programInfo, bufferInfo, uniforms) {
         gl.useProgram(programInfo.program);
@@ -263,87 +269,125 @@ function main() {
         webglUtils.drawBufferInfo(gl, bufferInfo, gl.TRIANGLES);
     }
 
+    function drawScene(projectionMatrix, viewMatrix, tileRotation, minimap = false) {
 
-    function getId(id) {
-        return [
-            ((id >> 0) & 0xFF) / 0xFF,
-            ((id >> 8) & 0xFF) / 0xFF,
-            ((id >> 16) & 0xFF) / 0xFF,
-            ((id >> 24) & 0xFF) / 0xFF,
-        ]
+        scacchiera.forEach((/** @type Square */ square) => {
+            let worldMatrix = m4.translate(m4.identity(), square.x, 0, square.z);
+            worldMatrix = m4.multiply(worldMatrix, square.transform);
+
+            drawObject(texturedProgramInfo, squareBufferInfo, {
+                u_matrix: computeWorldViewProjection(projectionMatrix, viewMatrix, worldMatrix),
+                u_texture: squareTexture,
+                u_worldInverseTranspose: m4.transpose(m4.inverse(worldMatrix)),
+                u_reverseLightDirection: m4.normalize([0, light.y, 0])
+            });
+
+            if (square.skyscraper > 0) {
+                let worldMatrix = m4.translate(m4.identity(), square.x, square.skyscraper, square.z);
+                worldMatrix = m4.scale(worldMatrix, .9, square.skyscraper, .9);
+                const cameraPos = getCameraPos();
+                drawObject(solidColorProgramInfo, grattacieloBufferInfo, {
+                    projection: m4.multiply(projectionMatrix, viewMatrix),
+                    modelview: worldMatrix,
+                    normalMat: m4.transpose(m4.inverse(worldMatrix)),
+                    mode: light.mode, // 1 - normal, 2 - ambient, 3 - diffuse, 4 - specular
+                    Ka: square.selected ? 1.0 : light.Ka,     // ambient
+                    Kd: square.selected ? 1.0 : light.Kd,     // diffuse
+                    Ks: light.Ks,     // specular
+                    shininessVal: light.shininessVal,
+                    ambientColor: colors[square.skyscraper],
+                    diffuseColor: colors[square.skyscraper],
+                    specularColor: [1, 1, 1],
+                    lightPos: minimap ? [square.x, 20, square.z] : [cameraPos[0], 8, cameraPos[2]],
+                });
+            }
+        });
+
+        numeriAttorno.forEach((/** @type Number */num) => {
+            let worldMatrix = m4.translate(m4.identity(), num.x, 0, num.z);
+            worldMatrix = m4.yRotate(worldMatrix, degToRad(tileRotation));
+
+            drawObject(texturedProgramInfo, numbersBufferInfos[num.n], {
+                u_matrix: computeWorldViewProjection(projectionMatrix, viewMatrix, worldMatrix),
+                u_texture: numberTexture,
+                u_worldInverseTranspose: m4.transpose(m4.inverse(worldMatrix)),
+                u_reverseLightDirection: m4.normalize([0, light.y, 0])
+            });
+        })
+
+        var worldMatrix = m4.translate(m4.identity(), settings.dimScacchiera + 1, 0, settings.dimScacchiera + 1);
+        drawObject(texturedProgramInfo, numbersBufferInfos[0], {
+            u_matrix: computeWorldViewProjection(projectionMatrix, viewMatrix, worldMatrix), u_texture: numberTexture,
+            u_worldInverseTranspose: m4.transpose(m4.inverse(worldMatrix)),
+            u_reverseLightDirection: m4.normalize([0, light.y, 0])
+        });
+        var worldMatrix = m4.translate(m4.identity(), -(settings.dimScacchiera + 1), 0, settings.dimScacchiera + 1);
+        drawObject(texturedProgramInfo, numbersBufferInfos[0], {
+            u_matrix: computeWorldViewProjection(projectionMatrix, viewMatrix, worldMatrix), u_texture: numberTexture,
+            u_worldInverseTranspose: m4.transpose(m4.inverse(worldMatrix)),
+            u_reverseLightDirection: m4.normalize([0, light.y, 0])
+        });
+        var worldMatrix = m4.translate(m4.identity(), settings.dimScacchiera + 1, 0, -(settings.dimScacchiera + 1));
+        drawObject(texturedProgramInfo, numbersBufferInfos[0], {
+            u_matrix: computeWorldViewProjection(projectionMatrix, viewMatrix, worldMatrix), u_texture: numberTexture,
+            u_worldInverseTranspose: m4.transpose(m4.inverse(worldMatrix)),
+            u_reverseLightDirection: m4.normalize([0, light.y, 0])
+        });
+        var worldMatrix = m4.translate(m4.identity(), -(settings.dimScacchiera + 1), 0, -(settings.dimScacchiera + 1));
+        drawObject(texturedProgramInfo, numbersBufferInfos[0], {
+            u_matrix: computeWorldViewProjection(projectionMatrix, viewMatrix, worldMatrix), u_texture: numberTexture,
+            u_worldInverseTranspose: m4.transpose(m4.inverse(worldMatrix)),
+            u_reverseLightDirection: m4.normalize([0, light.y, 0])
+        });
     }
 
-    // mouseX and mouseY are in CSS display space relative to canvas
+
     let mouseX = -1;
     let mouseY = -1;
     let oldPickNdx = -1;
+
     let onEmpty = false;
     let dragging = false;
     let movingView = false;
 
     let selectedSquare = null;
+    let selectedSkyscraper = 0;
 
 
     function render() {
-        webglUtils.resizeCanvasToDisplaySize(gl.canvas);
+        if (webglUtils.resizeCanvasToDisplaySize(gl.canvas)) {
+            setFramebufferAttachmentSizes(gl.canvas.width, gl.canvas.height);
+        }
 
         gl.enable(gl.SCISSOR_TEST);
 
-        const gameareaClientWidth = gl.canvas.clientWidth * (3 / 4);
-        const gameareaClientHeight = gl.canvas.clientHeight;
         const gameareaWidth = gl.canvas.width * (3 / 4);
         const gameareaHeight = gl.canvas.height;
         const gameareaAspect = gameareaWidth / gameareaHeight;
 
-        const minimapClientWidth = gl.canvas.clientWidth - gameareaClientWidth;
-        const minimapClientHeight = gl.canvas.clientHeight / 2;
         const minimapWidth = gl.canvas.width - gameareaWidth;
-        const minimapHeight = gl.canvas.height / 2;
+        const minimapHeight = minimapWidth;
         const minimapAspect = minimapWidth / minimapHeight;
+
+        const selectorWidth = minimapWidth;
+        const selectorHeight = gameareaHeight - minimapHeight;
+        const selectorAspect = selectorWidth / selectorHeight;
 
 
         const cameraPosition = getCameraPos();
         const target = [0, camera.z, 0];
         const up = [0, 1, 0];
         const cameraMatrix = m4.lookAt(cameraPosition, target, up);
-
-        // Make a view matrix from the camera matrix.
         const viewMatrix = m4.inverse(cameraMatrix);
 
 
-        // Figure out what pixel is under the mouse and setup
-        // a frustum to render just that pixel
-        {
-            // compute the rectangle the near plane of our frustum covers
-            const near = 1, far = 2000;
-            const aspect = gameareaAspect;
-            const top = Math.tan(degToRad(settings.fov) * 0.5) * near;
-            const bottom = -top;
-            const left = aspect * bottom;
-            const right = aspect * top;
-            const width = Math.abs(right - left);
-            const height = Math.abs(top - bottom);
+        const near = 1, far = 2000;
+        const aspect = gameareaAspect;
+        const projectionMatrix =
+            m4.perspective(degToRad(settings.fov), aspect, near, far);
 
-            // compute the portion of the near plane covers the 1 pixel
-            // under the mouse.
-            const pixelX = mouseX * gameareaWidth / gameareaClientWidth;
-            const pixelY = gameareaHeight - mouseY * gameareaHeight / gameareaClientHeight - 1;
+        const viewProjectionMatrix = m4.multiply(projectionMatrix, viewMatrix);
 
-            const subLeft = left + pixelX * width / gameareaWidth;
-            const subBottom = bottom + pixelY * height / gameareaHeight;
-            const subWidth = width / gameareaWidth;
-            const subHeight = height / gameareaHeight;
-
-            // make a frustum for that 1 pixel
-            const projectionMatrix = m4.frustum(
-                subLeft,
-                subLeft + subWidth,
-                subBottom,
-                subBottom + subHeight,
-                near,
-                far);
-            pickingViewProjectionMatrix = m4.multiply(projectionMatrix, viewMatrix);
-        }
 
         // ------ Draw the objects to the texture --------
 
@@ -358,12 +402,11 @@ function main() {
 
         scacchiera.forEach((/**@type Square*/ square) => {
             let worldMatrix = m4.translate(m4.identity(), square.x, 0, square.z);
-            // worldMatrix = m4.multiply(worldMatrix, square.transform);
 
             drawObject(pickingProgramInfo, squareBufferInfo, {
                 u_world: worldMatrix,
                 u_id: getId(square.id),
-                u_viewProjection: pickingViewProjectionMatrix,
+                u_viewProjection: viewProjectionMatrix,
             });
 
             if (square.skyscraper > 0) {
@@ -373,16 +416,104 @@ function main() {
                 drawObject(pickingProgramInfo, grattacieloBufferInfo, {
                     u_world: worldMatrix,
                     u_id: getId(square.id + scacchiera.length),
-                    u_viewProjection: pickingViewProjectionMatrix,
+                    u_viewProjection: viewProjectionMatrix,
                 });
             }
         });
 
+        gl.viewport(gameareaWidth, gameareaHeight - minimapHeight, minimapWidth, minimapHeight);
+        gl.scissor(gameareaWidth, gameareaHeight - minimapHeight, minimapWidth, minimapHeight);
+
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+        const minimapCameraPosition = [0, 12, 0];
+        const minimapCameraMatrix = m4.lookAt(minimapCameraPosition, [0, -orto.cam1Far, -1], up);
+        const minimapViewMatrix = m4.inverse(minimapCameraMatrix);
+
+        const minimapProjectionMatrix =
+            m4.orthographic(
+                -orto.minimapCam1OrthoUnits * minimapAspect,  // left
+                orto.minimapCam1OrthoUnits * minimapAspect,   // right
+                -orto.minimapCam1OrthoUnits,                  // bottom
+                orto.minimapCam1OrthoUnits,                   // top
+                orto.cam1Near,
+                orto.cam1Far);
+
+        const minimapViewProjectionMatrix = m4.multiply(minimapProjectionMatrix, minimapViewMatrix);
+
+        scacchiera.forEach((/**@type Square*/ square) => {
+            let worldMatrix = m4.translate(m4.identity(), square.x, 0, square.z);
+
+            drawObject(pickingProgramInfo, squareBufferInfo, {
+                u_world: worldMatrix,
+                u_id: getId(square.id),
+                u_viewProjection: minimapViewProjectionMatrix,
+            });
+
+            if (square.skyscraper > 0) {
+                let worldMatrix = m4.translate(m4.identity(), square.x, square.skyscraper, square.z);
+                worldMatrix = m4.scale(worldMatrix, 1, square.skyscraper, 1);
+
+                drawObject(pickingProgramInfo, grattacieloBufferInfo, {
+                    u_world: worldMatrix,
+                    u_id: getId(square.id + scacchiera.length),
+                    u_viewProjection: minimapViewProjectionMatrix,
+                });
+            }
+        });
+
+        gl.viewport(gameareaWidth, 0, minimapWidth, gameareaHeight - minimapHeight);
+        gl.scissor(gameareaWidth, 0, minimapWidth, gameareaHeight - minimapHeight);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+        const selectorCameraPosition = [0, 0, 5];
+        const selectorCameraMatrix = m4.lookAt(selectorCameraPosition, [0, 0, 0], up);
+        const selectorViewMatrix = m4.inverse(selectorCameraMatrix);
+
+        const selectorProjectionMatrix =
+            m4.orthographic(
+                -orto.selectorCam1OrthoUnits * selectorAspect,  // left
+                orto.selectorCam1OrthoUnits * selectorAspect,   // right
+                -orto.selectorCam1OrthoUnits,                  // bottom
+                orto.selectorCam1OrthoUnits,                   // top
+                orto.cam1Near,
+                orto.cam1Far);
+
+        const selectorViewProjectionMatrix = m4.multiply(selectorProjectionMatrix, selectorViewMatrix);
+
+        var yOffset = -12;
+        var xOffset = -4;
+        var nCols = Math.floor(settings.dimScacchiera / 3) + 1;
+        const size = 1.5;
+        for (let c = 0; c < nCols; c++) {
+            var nRows = Math.min(3, settings.dimScacchiera - 3 * c);
+            for (let r = 0; r < nRows; r++) {
+                const height = c * 3 + r + 1;
+
+                const xPos = xOffset + 8 * c;
+                const yPos = yOffset + 10 * r + (height / 1.5);
+
+                let worldMatrix = m4.identity();
+                worldMatrix = m4.translate(worldMatrix, xPos, yPos, -40);
+                worldMatrix = m4.xRotate(worldMatrix, degToRad(45));
+                worldMatrix = m4.yRotate(worldMatrix, degToRad(45));
+                worldMatrix = m4.scale(worldMatrix, size, height, size);
+
+                drawObject(pickingProgramInfo, grattacieloBufferInfo, {
+                    u_world: worldMatrix,
+                    u_id: getId(2 * scacchiera.length + height),
+                    u_viewProjection: selectorViewProjectionMatrix,
+                });
+            }
+        }
+
 
         // ------ Read the 1 pixel
 
+        const pixelX = mouseX * gl.canvas.width / gl.canvas.clientWidth;
+        const pixelY = gl.canvas.height - mouseY * gl.canvas.height / gl.canvas.clientHeight - 1;
         const data = new Uint8Array(4);
-        gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, data);
+        gl.readPixels(pixelX, pixelY, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, data);
         const id = data[0] + (data[1] << 8) + (data[2] << 16) + (data[3] << 24);
 
         // restore
@@ -391,12 +522,14 @@ function main() {
                 /**@type Square*/const object = scacchiera.filter(s => s.id == oldPickNdx)[0]
                 if (object) {
                     object.transform = m4.identity();
+                    object.selected = false;
                     oldPickNdx = -1;
                 }
             } else if (oldPickNdx > scacchiera.length) {
                 const object = scacchiera.filter(s => s.id + scacchiera.length == oldPickNdx)[0]
                 if (object) {
                     object.transform = m4.identity();
+                    object.selected = false;
                     oldPickNdx = -1;
                 }
             }
@@ -409,21 +542,27 @@ function main() {
             if (id <= scacchiera.length) { // looking at a square
                 /**@type Square*/const object = scacchiera.filter(s => s.id == id)[0]
                 if (object) {
-                    if (object.skyscraper === 0)
+                    if (object.skyscraper === 0) { // empty square 
                         object.transform = m4.scale(m4.identity(), .9, 1, .9)
-
+                    }
                     if (selectedSquare && !dragging) {
                         object.skyscraper = selectedSquare.skyscraper
                         selectedSquare.skyscraper = 0
+                        object.selected = false;
                         selectedSquare = null;
                     }
+                    if (selectedSkyscraper > 0 && !dragging) {
+                        object.skyscraper = selectedSkyscraper;
+                        selectedSkyscraper = 0;
+                    }
                 }
-            } else if (id > scacchiera.length) { // looking at a skyscraper
+            } else if (id > scacchiera.length && id <= 2 * scacchiera.length) { // looking at a skyscraper
                 /**@type Square*/const object = scacchiera.filter(s => s.id + scacchiera.length == id)[0]
                 if (object) {
                     object.transform = m4.scale(m4.identity(), .9, 1, .9)
 
-                    if (selectedSquare == null && dragging) {
+                    object.selected = true;
+                    if (selectedSquare == null && selectedSkyscraper === 0 && dragging) {
                         selectedSquare = object;
                     }
                     if (selectedSquare && !dragging) {
@@ -432,51 +571,38 @@ function main() {
                             selectedSquare.skyscraper = 0
                         }
                         selectedSquare = null;
+                        object.selected = false;
                     }
+                    if (selectedSkyscraper > 0 && !dragging) {
+                        object.skyscraper = selectedSkyscraper;
+                        selectedSkyscraper = 0;
+                    }
+                }
+            } else if (id > 2 * scacchiera.length && id <= 2 * scacchiera.length + settings.dimScacchiera) {
+                if (selectedSkyscraper === 0 && dragging) {
+                    selectedSkyscraper = id - 2 * scacchiera.length;
                 }
             }
         } else {
             onEmpty = true;
             if (!dragging) {
+                if (selectedSquare != null) {
+                    selectedSquare.skyscraper = 0
+                }
                 selectedSquare = null;
             }
         }
 
-
-        // ------ Draw the objects to the canvas ------
+        // ------------- Draw the objects to the canvas -------------
 
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+        // ------- Draw the game area ------- 
+
         gl.viewport(0, 0, gameareaWidth, gameareaHeight);
         gl.scissor(0, 0, gameareaWidth, gameareaHeight);
-
         gl.clearColor(0.8, 0.8, 1, 1);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-        const near = 1, far = 2000;
-        const aspect = gameareaAspect;
-        const projectionMatrix =
-            m4.perspective(degToRad(settings.fov), aspect, near, far);
-
-
-        scacchiera.forEach((/** @type Square */ square) => {
-            let worldMatrix = m4.translate(m4.identity(), square.x, 0, square.z);
-            worldMatrix = m4.multiply(worldMatrix, square.transform);
-
-            drawObject(texturedProgramInfo, squareBufferInfo, {
-                u_matrix: computeWorldViewProjection(projectionMatrix, viewMatrix, worldMatrix),
-                u_texture: squareTexture,
-            });
-
-            if (square.skyscraper > 0) {
-                let worldMatrix = m4.translate(m4.identity(), square.x, square.skyscraper, square.z);
-                worldMatrix = m4.scale(worldMatrix, .9, square.skyscraper, .9);
-
-                drawObject(solidColorProgramInfo, grattacieloBufferInfo, {
-                    u_matrix: computeWorldViewProjection(projectionMatrix, viewMatrix, worldMatrix),
-                    u_color: [square.skyscraper / settings.dimScacchiera, .4, square.skyscraper / 3 * settings.dimScacchiera, 1],
-                });
-            }
-        });
 
         let rotation = 0;
         if (camera.angleX > 315 || camera.angleX < 45) {
@@ -489,91 +615,72 @@ function main() {
             rotation = 270
         }
 
-        numeriAttorno.forEach((/** @type Number */num) => {
-            let worldMatrix = m4.translate(m4.identity(), num.x, 0, num.z);
-            worldMatrix = m4.yRotate(worldMatrix, degToRad(rotation));
-
-            drawObject(texturedProgramInfo, numbersBufferInfos[num.n], {
-                u_matrix: computeWorldViewProjection(projectionMatrix, viewMatrix, worldMatrix),
-                u_texture: numberTexture,
-            });
-        })
-
-        var worldMatrix = m4.translate(m4.identity(), settings.dimScacchiera + 1, 0, settings.dimScacchiera + 1);
-        drawObject(texturedProgramInfo, numbersBufferInfos[0], { u_matrix: computeWorldViewProjection(projectionMatrix, viewMatrix, worldMatrix), u_texture: numberTexture, });
-        var worldMatrix = m4.translate(m4.identity(), -(settings.dimScacchiera + 1), 0, settings.dimScacchiera + 1);
-        drawObject(texturedProgramInfo, numbersBufferInfos[0], { u_matrix: computeWorldViewProjection(projectionMatrix, viewMatrix, worldMatrix), u_texture: numberTexture, });
-        var worldMatrix = m4.translate(m4.identity(), settings.dimScacchiera + 1, 0, -(settings.dimScacchiera + 1));
-        drawObject(texturedProgramInfo, numbersBufferInfos[0], { u_matrix: computeWorldViewProjection(projectionMatrix, viewMatrix, worldMatrix), u_texture: numberTexture, });
-        var worldMatrix = m4.translate(m4.identity(), -(settings.dimScacchiera + 1), 0, -(settings.dimScacchiera + 1));
-        drawObject(texturedProgramInfo, numbersBufferInfos[0], { u_matrix: computeWorldViewProjection(projectionMatrix, viewMatrix, worldMatrix), u_texture: numberTexture, });
-
+        drawScene(projectionMatrix, viewMatrix, rotation)
 
         // ------- Draw the minimap -------
 
-        gl.viewport(gameareaWidth, minimapHeight, minimapWidth, minimapHeight);
-        gl.scissor(gameareaWidth, minimapHeight, minimapWidth, minimapHeight);
+        gl.viewport(gameareaWidth, gameareaHeight - minimapHeight, minimapWidth, minimapHeight);
+        gl.scissor(gameareaWidth, gameareaHeight - minimapHeight, minimapWidth, minimapHeight);
         gl.clearColor(1, 0.8, 1, 1);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-        const minimapCameraPosition = [0, 30, 0];
-        const minimapCameraMatrix = m4.lookAt(minimapCameraPosition, [0, 0, -1], up);
+        drawScene(minimapProjectionMatrix, minimapViewMatrix, 90, true)
 
-        const minimapViewMatrix = m4.inverse(minimapCameraMatrix);
+        // ------- Draw selector -------
 
-        const minimapProjectionMatrix =
-            m4.orthographic(
-                -orto.cam1OrthoUnits * minimapAspect,  // left
-                orto.cam1OrthoUnits * minimapAspect,   // right
-                -orto.cam1OrthoUnits,           // bottom
-                orto.cam1OrthoUnits,            // top
-                orto.cam1Near,
-                orto.cam1Far);
+        gl.viewport(gameareaWidth, 0, minimapWidth, gameareaHeight - minimapHeight);
+        gl.scissor(gameareaWidth, 0, minimapWidth, gameareaHeight - minimapHeight);
+        gl.clearColor(0.2, 0.2, 0.2, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-        scacchiera.forEach((/** @type Square */ square) => {
-            let worldMatrix = m4.translate(m4.identity(), square.x, 0, square.z);
-            worldMatrix = m4.multiply(worldMatrix, square.transform);
+        var yOffset = -12;
+        var xOffset = -4;
+        var nCols = Math.floor(settings.dimScacchiera / 3) + 1;
+        for (let c = 0; c < nCols; c++) {
+            var nRows = Math.min(3, settings.dimScacchiera - 3 * c);
+            for (let r = 0; r < nRows; r++) {
+                const height = c * 3 + r + 1;
 
-            drawObject(texturedProgramInfo, squareBufferInfo, {
-                u_matrix: computeWorldViewProjection(minimapProjectionMatrix, minimapViewMatrix, worldMatrix),
-                u_texture: squareTexture,
-            });
+                const xPos = xOffset + 8 * c;
+                const yPos = yOffset + 10 * r + (height / 1.5);
 
-            if (square.skyscraper > 0) {
-                let worldMatrix = m4.translate(m4.identity(), square.x, .1, square.z);
-                worldMatrix = m4.scale(worldMatrix, .9, .1, .9);
+                let worldMatrix = m4.identity();
+                worldMatrix = m4.translate(worldMatrix, xPos, yPos, -40);
+                worldMatrix = m4.xRotate(worldMatrix, degToRad(45));
+                worldMatrix = m4.yRotate(worldMatrix, degToRad(45));
+                worldMatrix = m4.scale(worldMatrix, size, height, size);
+
+                let Ka = .6, Kd = .8;
+                if (scacchiera.filter(s => s.skyscraper === height).length >= settings.dimScacchiera) {
+                    Ka = .2;
+                    Kd = .4;
+                }
+                if (height === id - 2 * scacchiera.length) {
+                    Ka += .4;
+                    Kd += .2;
+                }
 
                 drawObject(solidColorProgramInfo, grattacieloBufferInfo, {
-                    u_matrix: computeWorldViewProjection(minimapProjectionMatrix, minimapViewMatrix, worldMatrix),
-                    u_color: [square.skyscraper / settings.dimScacchiera, .4, square.skyscraper / 3 * settings.dimScacchiera, 1],
+                    projection: m4.multiply(selectorProjectionMatrix, selectorViewMatrix),
+                    modelview: worldMatrix,
+                    normalMat: m4.transpose(m4.inverse(worldMatrix)),
+                    mode: light.mode,
+                    Ka: Ka, Kd: Kd, Ks: 0,
+                    shininessVal: light.shininessVal,
+                    ambientColor: colors[height],
+                    diffuseColor: colors[height],
+                    specularColor: [1, 1, 1],
+                    lightPos: [xPos * 2, yPos, 0],
                 });
             }
-        });
+        }
 
-        numeriAttorno.forEach((/** @type Number */num) => {
-            let worldMatrix = m4.translate(m4.identity(), num.x, 0, num.z);
-            worldMatrix = m4.yRotate(worldMatrix, degToRad(90));
+        // ------------------------------------------------
 
-            drawObject(texturedProgramInfo, numbersBufferInfos[num.n], {
-                u_matrix: computeWorldViewProjection(minimapProjectionMatrix, minimapViewMatrix, worldMatrix),
-                u_texture: numberTexture,
-            });
-        })
-
-        var worldMatrix = m4.translate(m4.identity(), settings.dimScacchiera + 1, 0, settings.dimScacchiera + 1);
-        drawObject(texturedProgramInfo, numbersBufferInfos[0], { u_matrix: computeWorldViewProjection(minimapProjectionMatrix, minimapViewMatrix, worldMatrix), u_texture: numberTexture, });
-        var worldMatrix = m4.translate(m4.identity(), -(settings.dimScacchiera + 1), 0, settings.dimScacchiera + 1);
-        drawObject(texturedProgramInfo, numbersBufferInfos[0], { u_matrix: computeWorldViewProjection(minimapProjectionMatrix, minimapViewMatrix, worldMatrix), u_texture: numberTexture, });
-        var worldMatrix = m4.translate(m4.identity(), settings.dimScacchiera + 1, 0, -(settings.dimScacchiera + 1));
-        drawObject(texturedProgramInfo, numbersBufferInfos[0], { u_matrix: computeWorldViewProjection(minimapProjectionMatrix, minimapViewMatrix, worldMatrix), u_texture: numberTexture, });
-        var worldMatrix = m4.translate(m4.identity(), -(settings.dimScacchiera + 1), 0, -(settings.dimScacchiera + 1));
-        drawObject(texturedProgramInfo, numbersBufferInfos[0], { u_matrix: computeWorldViewProjection(minimapProjectionMatrix, minimapViewMatrix, worldMatrix), u_texture: numberTexture, });
-
-
-        // set the nodes
-        angleXNode.nodeValue = camera.angleX.toFixed(1);  // no decimal place
-        angleYNode.nodeValue = camera.angleY.toFixed(1);   // 2 decimal places
-        idNode.nodeValue = id;
+        // set the info nodes
+        angleXNode.nodeValue = camera.angleX.toFixed(1);
+        angleYNode.nodeValue = camera.angleY.toFixed(1);
+        idNode.nodeValue = `${id}`;
 
         requestAnimationFrame(render);
     }
@@ -666,7 +773,6 @@ function computeWorldViewProjection(projectionMatrix, viewMatrix, worldMatrix) {
     return worldViewProjectionMatrix;
 }
 
-
 function createSquareBufferInfo(gl) {
     return webglUtils.createBufferInfoFromArrays(gl, {
         position: { numComponents: 3, data: new Float32Array(square_vertices) },
@@ -686,5 +792,15 @@ function createCubeBufferInfo(gl) {
     }
     return webglUtils.createBufferInfoFromArrays(gl, attribs);
 }
+
+function getId(id) {
+    return [
+        ((id >> 0) & 0xFF) / 0xFF,
+        ((id >> 8) & 0xFF) / 0xFF,
+        ((id >> 16) & 0xFF) / 0xFF,
+        ((id >> 24) & 0xFF) / 0xFF,
+    ]
+}
+
 
 main();

@@ -80,9 +80,9 @@ function main() {
 
     const settings = {
         dimScacchiera: 5,
-        fov: 40,
     }
     const camera = {
+        fov: 40,
         near: 1,
         far: 2000,
         zoom: 30,
@@ -91,7 +91,7 @@ function main() {
         angleX: 70,
         angleY: 70,
         slowness: 15,
-        z: 3.5,
+        z: 4.5,
         keyMovement: 3,
         orto: false,
         lastOrtoAngle: 0,
@@ -102,8 +102,8 @@ function main() {
         gameareaSnapAngleX: 0,
         gameareaSnapAngleY: 0,
         gameareaCamOrthoUnits: 10,
-        minimapCamOrthoUnits: 8,
-        selectorCamOrthoUnits: 15,
+        minimapCamOrthoUnits: 10,
+        selectorCamOrthoUnits: settings.dimScacchiera + 1.5,
     }
     const light = {
         x: 0, y: 10, z: 0,
@@ -112,16 +112,9 @@ function main() {
         shininessVal: 80,
     }
 
-    var gui = new dat.GUI();
-    gui.close();
-    // gui.add(light, 'x')
-    // gui.add(light, 'y')
-    gui.add(orto, 'selectorCamOrthoUnits')
-    gui.add(light, 'mode').min(1).max(4).step(1)
-    gui.add(light, 'Ka').min(0).max(1).step(.05)
-    gui.add(light, 'Kd').min(0).max(1).step(.05)
-    gui.add(light, 'Ks').min(0).max(1).step(.05)
-    gui.add(light, 'shininessVal').min(0).max(128).step(.1)
+    // var gui = new dat.GUI();
+    // gui.close();
+    // gui.add(orto, 'selectorCamOrthoUnits')
 
     const squareBufferInfo = createSquareBufferInfo(gl);
     const grattacieloBufferInfo = createCubeBufferInfo(gl);
@@ -196,10 +189,10 @@ function main() {
     for (let i = 0; i < settings.dimScacchiera; i++) {
         let d1 = (i / (settings.dimScacchiera - 1) - .5) * 2 * (settings.dimScacchiera - 1);
         let d2 = settings.dimScacchiera + 1;
-        numeriAttorno.push(new Number(d1, d2, partita[i + 0]));
-        numeriAttorno.push(new Number(d2, d1, partita[i + 1 * settings.dimScacchiera]));
-        numeriAttorno.push(new Number(d1, -d2, partita[i + 2 * settings.dimScacchiera]));
-        numeriAttorno.push(new Number(-d2, d1, partita[i + 3 * settings.dimScacchiera]));
+        numeriAttorno.push(new Number(d1, d2, settings.dimScacchiera === 5 ? partita[i + 0] : getRandomInt(1, settings.dimScacchiera)));
+        numeriAttorno.push(new Number(d2, d1, settings.dimScacchiera === 5 ? partita[i + 1 * settings.dimScacchiera] : getRandomInt(1, settings.dimScacchiera)));
+        numeriAttorno.push(new Number(d1, -d2, settings.dimScacchiera === 5 ? partita[i + 2 * settings.dimScacchiera] : getRandomInt(1, settings.dimScacchiera)));
+        numeriAttorno.push(new Number(-d2, d1, settings.dimScacchiera === 5 ? partita[i + 3 * settings.dimScacchiera] : getRandomInt(1, settings.dimScacchiera)));
     }
 
     // generate some skyscrapers in random spots
@@ -213,7 +206,7 @@ function main() {
     function getCameraPos() {
         const X = camera.zoom * Math.cos(degToRad(camera.angleX)) * Math.sin(degToRad(camera.angleY))
         const Z = camera.zoom * Math.sin(degToRad(camera.angleX)) * Math.sin(degToRad(camera.angleY))
-        const Y = camera.z + camera.zoom * Math.cos(degToRad(camera.angleY))
+        const Y = camera.z / 2 + camera.zoom * Math.cos(degToRad(camera.angleY))
 
         return [X, Y, Z]
     }
@@ -399,22 +392,23 @@ function main() {
             setFramebufferAttachmentSizes(gl.canvas.width, gl.canvas.height);
         }
 
-        gl.enable(gl.SCISSOR_TEST);
-
-        const gameareaClientWidth = gl.canvas.clientWidth * (3 / 4);
-        const gameareaClientHeight = gl.canvas.clientHeight;
-        const gameareaWidth = gl.canvas.width * (3 / 4);
-        const gameareaHeight = gl.canvas.height;
+        const gameareaHeight = Math.ceil(gl.canvas.height * (4 / 5));
+        const gameareaWidth = gameareaHeight; // gl.canvas.width * (2 / 3);
         const gameareaAspect = gameareaWidth / gameareaHeight;
+        const gameareaX = 0;
+        const gameareaY = gl.canvas.height - gameareaHeight;
 
         const minimapWidth = gl.canvas.width - gameareaWidth;
         const minimapHeight = minimapWidth;
         const minimapAspect = minimapWidth / minimapHeight;
+        const minimapX = gameareaWidth;
+        const minimapY = gl.canvas.height - minimapHeight;
 
-        const selectorWidth = minimapWidth;
-        const selectorHeight = gameareaHeight - minimapHeight;
+        const selectorWidth = gameareaWidth;
+        const selectorHeight = gl.canvas.height - gameareaHeight;
         const selectorAspect = selectorWidth / selectorHeight;
-
+        const selectorX = 0;
+        const selectorY = 0;
 
         const projectionMatrix = camera.orto ?
             m4.orthographic(
@@ -424,7 +418,7 @@ function main() {
                 orto.gameareaCamOrthoUnits,                   // top
                 orto.cam1Near,
                 orto.cam1Far) :
-            m4.perspective(degToRad(settings.fov), gameareaAspect, camera.near, camera.far);
+            m4.perspective(degToRad(camera.fov), gameareaAspect, camera.near, camera.far);
 
         const cameraPosition = getCameraPos();
         const target = [0, camera.z, 0];
@@ -432,15 +426,17 @@ function main() {
         const cameraMatrix = m4.lookAt(cameraPosition, target, up);
         const viewMatrix = m4.inverse(cameraMatrix);
 
-
         const viewProjectionMatrix = m4.multiply(projectionMatrix, viewMatrix);
 
 
         // ------ Draw the objects to the texture --------
 
         gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
-        gl.viewport(0, 0, gameareaWidth, gameareaHeight);
-        gl.scissor(0, 0, gameareaWidth, gameareaHeight);
+
+        gl.enable(gl.SCISSOR_TEST);
+
+        gl.viewport(gameareaX, gameareaY, gameareaWidth, gameareaHeight);
+        gl.scissor(gameareaX, gameareaY, gameareaWidth, gameareaHeight);
 
         gl.enable(gl.CULL_FACE);
         gl.enable(gl.DEPTH_TEST);
@@ -468,8 +464,8 @@ function main() {
             }
         });
 
-        gl.viewport(gameareaWidth, gameareaHeight - minimapHeight, minimapWidth, minimapHeight);
-        gl.scissor(gameareaWidth, gameareaHeight - minimapHeight, minimapWidth, minimapHeight);
+        gl.viewport(minimapX, minimapY, minimapWidth, minimapHeight);
+        gl.scissor(minimapX, minimapY, minimapWidth, minimapHeight);
 
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
@@ -509,8 +505,8 @@ function main() {
             }
         });
 
-        gl.viewport(gameareaWidth, 0, minimapWidth, gameareaHeight - minimapHeight);
-        gl.scissor(gameareaWidth, 0, minimapWidth, gameareaHeight - minimapHeight);
+        gl.viewport(selectorX, selectorY, selectorWidth, selectorHeight);
+        gl.scissor(selectorX, selectorY, selectorWidth, selectorHeight);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
         const selectorCameraPosition = [0, 0, 5];
@@ -528,30 +524,26 @@ function main() {
 
         const selectorViewProjectionMatrix = m4.multiply(selectorProjectionMatrix, selectorViewMatrix);
 
-        var yOffset = -12;
-        var xOffset = -4;
-        var nCols = Math.floor(settings.dimScacchiera / 3) + 1;
         const size = 1.5;
-        for (let c = 0; c < nCols; c++) {
-            var nRows = Math.min(3, settings.dimScacchiera - 3 * c);
-            for (let r = 0; r < nRows; r++) {
-                const height = c * 3 + r + 1;
+        var spacing = 10;
+        var yOffset = -(settings.dimScacchiera * size) / 2;
+        var xOffset = spacing * (1 - settings.dimScacchiera) / 2;
+        for (let i = 0; i < settings.dimScacchiera; i++) {
+            const height = i + 1;
+            const xPos = xOffset + spacing * i;
+            const yPos = yOffset + (height / size);
 
-                const xPos = xOffset + 8 * c;
-                const yPos = yOffset + 10 * r + (height / 1.5);
+            let worldMatrix = m4.identity();
+            worldMatrix = m4.translate(worldMatrix, xPos, yPos, -40);
+            worldMatrix = m4.xRotate(worldMatrix, degToRad(45));
+            worldMatrix = m4.yRotate(worldMatrix, degToRad(45));
+            worldMatrix = m4.scale(worldMatrix, size, height, size);
 
-                let worldMatrix = m4.identity();
-                worldMatrix = m4.translate(worldMatrix, xPos, yPos, -40);
-                worldMatrix = m4.xRotate(worldMatrix, degToRad(45));
-                worldMatrix = m4.yRotate(worldMatrix, degToRad(45));
-                worldMatrix = m4.scale(worldMatrix, size, height, size);
-
-                drawObject(pickingProgramInfo, grattacieloBufferInfo, {
-                    u_world: worldMatrix,
-                    u_id: getId(2 * scacchiera.length + height),
-                    u_viewProjection: selectorViewProjectionMatrix,
-                });
-            }
+            drawObject(pickingProgramInfo, grattacieloBufferInfo, {
+                u_world: worldMatrix,
+                u_id: getId(2 * scacchiera.length + height),
+                u_viewProjection: selectorViewProjectionMatrix,
+            });
         }
 
 
@@ -651,8 +643,8 @@ function main() {
 
         // ------- Draw the game area ------- 
 
-        gl.viewport(0, 0, gameareaWidth, gameareaHeight);
-        gl.scissor(0, 0, gameareaWidth, gameareaHeight);
+        gl.viewport(gameareaX, gameareaY, gameareaWidth, gameareaHeight);
+        gl.scissor(gameareaX, gameareaY, gameareaWidth, gameareaHeight);
         gl.clearColor(0.8, 0.8, 1, 1);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
@@ -671,8 +663,8 @@ function main() {
 
         // ------- Draw the minimap -------
 
-        gl.viewport(gameareaWidth, gameareaHeight - minimapHeight, minimapWidth, minimapHeight);
-        gl.scissor(gameareaWidth, gameareaHeight - minimapHeight, minimapWidth, minimapHeight);
+        gl.viewport(minimapX, minimapY, minimapWidth, minimapHeight);
+        gl.scissor(minimapX, minimapY, minimapWidth, minimapHeight);
         gl.clearColor(1, 0.8, 1, 1);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
@@ -680,51 +672,46 @@ function main() {
 
         // ------- Draw selector -------
 
-        gl.viewport(gameareaWidth, 0, minimapWidth, gameareaHeight - minimapHeight);
-        gl.scissor(gameareaWidth, 0, minimapWidth, gameareaHeight - minimapHeight);
+        gl.viewport(selectorX, selectorY, selectorWidth, selectorHeight);
+        gl.scissor(selectorX, selectorY, selectorWidth, selectorHeight);
         gl.clearColor(0.2, 0.2, 0.2, 1);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-        var yOffset = -12;
-        var xOffset = -4;
-        var nCols = Math.floor(settings.dimScacchiera / 3) + 1;
-        for (let c = 0; c < nCols; c++) {
-            var nRows = Math.min(3, settings.dimScacchiera - 3 * c);
-            for (let r = 0; r < nRows; r++) {
-                const height = c * 3 + r + 1;
+        var spacing = 10;
+        var yOffset = -(settings.dimScacchiera * size) / 2;
+        var xOffset = spacing * (1 - settings.dimScacchiera) / 2;
 
-                const xPos = xOffset + 8 * c;
-                const yPos = yOffset + 10 * r + (height / 1.5);
+        for (let i = 0; i < settings.dimScacchiera; i++) {
+            const height = i + 1;
+            const xPos = xOffset + spacing * i;
+            const yPos = yOffset + (height / size);
 
-                let worldMatrix = m4.identity();
-                worldMatrix = m4.translate(worldMatrix, xPos, yPos, -40);
-                worldMatrix = m4.xRotate(worldMatrix, degToRad(45));
-                worldMatrix = m4.yRotate(worldMatrix, degToRad(45));
-                worldMatrix = m4.scale(worldMatrix, size, height, size);
+            let worldMatrix = m4.identity();
+            worldMatrix = m4.translate(worldMatrix, xPos, yPos, -40);
+            worldMatrix = m4.xRotate(worldMatrix, degToRad(45));
+            worldMatrix = m4.yRotate(worldMatrix, degToRad(45));
+            worldMatrix = m4.scale(worldMatrix, size, height, size);
 
-                let Ka = .6, Kd = .8;
-                if (scacchiera.filter(s => s.skyscraper === height).length >= settings.dimScacchiera) {
-                    Ka = .2;
-                    Kd = .4;
-                }
-                if (height === id - 2 * scacchiera.length) {
-                    Ka += .4;
-                    Kd += .2;
-                }
-
-                drawObject(solidColorProgramInfo, grattacieloBufferInfo, {
-                    projection: m4.multiply(selectorProjectionMatrix, selectorViewMatrix),
-                    modelview: worldMatrix,
-                    normalMat: m4.transpose(m4.inverse(worldMatrix)),
-                    mode: light.mode,
-                    Ka: Ka, Kd: Kd, Ks: 0,
-                    shininessVal: light.shininessVal,
-                    ambientColor: colors[height],
-                    diffuseColor: colors[height],
-                    specularColor: [1, 1, 1],
-                    lightPos: [xPos * 2, yPos, 0],
-                });
+            let Ka = .6, Kd = .8;
+            if (scacchiera.filter(s => s.skyscraper === height).length >= settings.dimScacchiera) {
+                Ka = .2;
+                Kd = .4;
             }
+            if (height === id - 2 * scacchiera.length) {
+                Ka += .4;
+                Kd += .2;
+            }
+
+            drawObject(solidColorProgramInfo, grattacieloBufferInfo, {
+                projection: m4.multiply(selectorProjectionMatrix, selectorViewMatrix),
+                modelview: worldMatrix,
+                normalMat: m4.transpose(m4.inverse(worldMatrix)),
+                mode: light.mode, Ka: Ka, Kd: Kd, Ks: 0,
+                shininessVal: light.shininessVal,
+                ambientColor: colors[height], diffuseColor: colors[height],
+                specularColor: [1, 1, 1],
+                lightPos: [xPos - spacing / 2, yPos, 0],
+            });
         }
 
         // ------------------------------------------------

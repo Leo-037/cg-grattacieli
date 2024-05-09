@@ -83,19 +83,27 @@ function main() {
         fov: 40,
     }
     const camera = {
+        near: 1,
+        far: 2000,
         zoom: 30,
         minZoom: 13,
         maxZoom: 100,
         angleX: 70,
         angleY: 70,
-        slowness: 5,
+        slowness: 15,
         z: 3.5,
+        keyMovement: 3,
+        orto: false,
+        lastOrtoAngle: 0,
     }
     const orto = {
         cam1Near: 1,
-        cam1Far: 500,
-        minimapCam1OrthoUnits: 8,
-        selectorCam1OrthoUnits: 15,
+        cam1Far: 2000,
+        gameareaSnapAngleX: 0,
+        gameareaSnapAngleY: 0,
+        gameareaCamOrthoUnits: 10,
+        minimapCamOrthoUnits: 8,
+        selectorCamOrthoUnits: 15,
     }
     const light = {
         x: 0, y: 10, z: 0,
@@ -108,7 +116,7 @@ function main() {
     gui.close();
     // gui.add(light, 'x')
     // gui.add(light, 'y')
-    gui.add(orto, 'selectorCam1OrthoUnits')
+    gui.add(orto, 'selectorCamOrthoUnits')
     gui.add(light, 'mode').min(1).max(4).step(1)
     gui.add(light, 'Ka').min(0).max(1).step(.05)
     gui.add(light, 'Kd').min(0).max(1).step(.05)
@@ -183,7 +191,7 @@ function main() {
         1, 4, 3, 2, 2,
         3, 4, 1, 2, 2,
         4, 2, 1, 2, 3,
-        3, 2, 3, 2, 1 ]
+        3, 2, 3, 2, 1]
     let numeriAttorno = [];
     for (let i = 0; i < settings.dimScacchiera; i++) {
         let d1 = (i / (settings.dimScacchiera - 1) - .5) * 2 * (settings.dimScacchiera - 1);
@@ -195,10 +203,10 @@ function main() {
     }
 
     // generate some skyscrapers in random spots
-    // for (let i = 0; i < settings.dimScacchiera * 2; i++) {
-    // /**@type Square*/let square = scacchiera[Math.floor(Math.random() * scacchiera.length)];;
-    //     square.skyscraper = getRandomInt(1, settings.dimScacchiera + 1);
-    // }
+    for (let i = 0; i < settings.dimScacchiera * 2; i++) {
+    /**@type Square*/let square = scacchiera[Math.floor(Math.random() * scacchiera.length)];;
+        square.skyscraper = getRandomInt(1, settings.dimScacchiera + 1);
+    }
 
 
     // computes the camera position as it orbits around the center
@@ -282,7 +290,35 @@ function main() {
                 u_reverseLightDirection: m4.normalize([0, light.y, 0])
             });
 
-            if (square.skyscraper > 0) {
+            if (squareLookedAt === square.id) {
+                let skyscraper;
+                if (selectedSquare) {
+                    skyscraper = selectedSquare.skyscraper;
+                } else if (selectedSkyscraper > 0) {
+                    skyscraper = selectedSkyscraper;
+                } else {
+                    skyscraper = square.skyscraper;
+                }
+                if (skyscraper > 0) {
+                    let worldMatrix = m4.translate(m4.identity(), square.x, skyscraper, square.z);
+                    worldMatrix = m4.scale(worldMatrix, .9, skyscraper, .9);
+                    const cameraPos = getCameraPos();
+                    drawObject(solidColorProgramInfo, grattacieloBufferInfo, {
+                        projection: m4.multiply(projectionMatrix, viewMatrix),
+                        modelview: worldMatrix,
+                        normalMat: m4.transpose(m4.inverse(worldMatrix)),
+                        mode: light.mode, // 1 - normal, 2 - ambient, 3 - diffuse, 4 - specular
+                        Ka: 1.0,     // ambient
+                        Kd: 1.0,     // diffuse
+                        Ks: light.Ks,     // specular
+                        shininessVal: light.shininessVal,
+                        ambientColor: colors[skyscraper],
+                        diffuseColor: colors[skyscraper],
+                        specularColor: [1, 1, 1],
+                        lightPos: minimap ? [square.x, 20, square.z] : [cameraPos[0], 8, cameraPos[2]],
+                    });
+                }
+            } else if (square.skyscraper > 0 && !(selectedSquare && selectedSquare.id === square.id)) {
                 let worldMatrix = m4.translate(m4.identity(), square.x, square.skyscraper, square.z);
                 worldMatrix = m4.scale(worldMatrix, .9, square.skyscraper, .9);
                 const cameraPos = getCameraPos();
@@ -291,8 +327,8 @@ function main() {
                     modelview: worldMatrix,
                     normalMat: m4.transpose(m4.inverse(worldMatrix)),
                     mode: light.mode, // 1 - normal, 2 - ambient, 3 - diffuse, 4 - specular
-                    Ka: square.selected ? 1.0 : light.Ka,     // ambient
-                    Kd: square.selected ? 1.0 : light.Kd,     // diffuse
+                    Ka: light.Ka,     // ambient
+                    Kd: light.Kd,     // diffuse
                     Ks: light.Ks,     // specular
                     shininessVal: light.shininessVal,
                     ambientColor: colors[square.skyscraper],
@@ -301,11 +337,17 @@ function main() {
                     lightPos: minimap ? [square.x, 20, square.z] : [cameraPos[0], 8, cameraPos[2]],
                 });
             }
+
+
         });
 
         numeriAttorno.forEach((/** @type Number */num) => {
             let worldMatrix = m4.translate(m4.identity(), num.x, 0, num.z);
             worldMatrix = m4.yRotate(worldMatrix, degToRad(tileRotation));
+            if (!minimap && camera.orto) {
+                worldMatrix = m4.zRotate(worldMatrix, degToRad(90));
+                worldMatrix = m4.translate(worldMatrix, -1, 0, 0)
+            }
 
             drawObject(texturedProgramInfo, numbersBufferInfos[num.n], {
                 u_matrix: computeWorldViewProjection(projectionMatrix, viewMatrix, worldMatrix),
@@ -315,30 +357,26 @@ function main() {
             });
         })
 
+        function drawEmptySquare(worldMatrix) {
+            if (!minimap && camera.orto) {
+                worldMatrix = m4.yRotate(worldMatrix, degToRad(tileRotation));
+                worldMatrix = m4.zRotate(worldMatrix, degToRad(90));
+                worldMatrix = m4.translate(worldMatrix, -1, 0, 0)
+            }
+            drawObject(texturedProgramInfo, numbersBufferInfos[0], {
+                u_matrix: computeWorldViewProjection(projectionMatrix, viewMatrix, worldMatrix), u_texture: numberTexture,
+                u_worldInverseTranspose: m4.transpose(m4.inverse(worldMatrix)),
+                u_reverseLightDirection: m4.normalize([0, light.y, 0])
+            });
+        }
         var worldMatrix = m4.translate(m4.identity(), settings.dimScacchiera + 1, 0, settings.dimScacchiera + 1);
-        drawObject(texturedProgramInfo, numbersBufferInfos[0], {
-            u_matrix: computeWorldViewProjection(projectionMatrix, viewMatrix, worldMatrix), u_texture: numberTexture,
-            u_worldInverseTranspose: m4.transpose(m4.inverse(worldMatrix)),
-            u_reverseLightDirection: m4.normalize([0, light.y, 0])
-        });
+        drawEmptySquare(worldMatrix)
         var worldMatrix = m4.translate(m4.identity(), -(settings.dimScacchiera + 1), 0, settings.dimScacchiera + 1);
-        drawObject(texturedProgramInfo, numbersBufferInfos[0], {
-            u_matrix: computeWorldViewProjection(projectionMatrix, viewMatrix, worldMatrix), u_texture: numberTexture,
-            u_worldInverseTranspose: m4.transpose(m4.inverse(worldMatrix)),
-            u_reverseLightDirection: m4.normalize([0, light.y, 0])
-        });
+        drawEmptySquare(worldMatrix)
         var worldMatrix = m4.translate(m4.identity(), settings.dimScacchiera + 1, 0, -(settings.dimScacchiera + 1));
-        drawObject(texturedProgramInfo, numbersBufferInfos[0], {
-            u_matrix: computeWorldViewProjection(projectionMatrix, viewMatrix, worldMatrix), u_texture: numberTexture,
-            u_worldInverseTranspose: m4.transpose(m4.inverse(worldMatrix)),
-            u_reverseLightDirection: m4.normalize([0, light.y, 0])
-        });
+        drawEmptySquare(worldMatrix)
         var worldMatrix = m4.translate(m4.identity(), -(settings.dimScacchiera + 1), 0, -(settings.dimScacchiera + 1));
-        drawObject(texturedProgramInfo, numbersBufferInfos[0], {
-            u_matrix: computeWorldViewProjection(projectionMatrix, viewMatrix, worldMatrix), u_texture: numberTexture,
-            u_worldInverseTranspose: m4.transpose(m4.inverse(worldMatrix)),
-            u_reverseLightDirection: m4.normalize([0, light.y, 0])
-        });
+        drawEmptySquare(worldMatrix)
     }
 
 
@@ -349,7 +387,9 @@ function main() {
     let onEmpty = false;
     let dragging = false;
     let movingView = false;
+    let holdingNothing = true;
 
+    let squareLookedAt = 0;
     let selectedSquare = null;
     let selectedSkyscraper = 0;
 
@@ -361,6 +401,8 @@ function main() {
 
         gl.enable(gl.SCISSOR_TEST);
 
+        const gameareaClientWidth = gl.canvas.clientWidth * (3 / 4);
+        const gameareaClientHeight = gl.canvas.clientHeight;
         const gameareaWidth = gl.canvas.width * (3 / 4);
         const gameareaHeight = gl.canvas.height;
         const gameareaAspect = gameareaWidth / gameareaHeight;
@@ -374,17 +416,22 @@ function main() {
         const selectorAspect = selectorWidth / selectorHeight;
 
 
+        const projectionMatrix = camera.orto ?
+            m4.orthographic(
+                -orto.gameareaCamOrthoUnits * gameareaAspect,  // left
+                orto.gameareaCamOrthoUnits * gameareaAspect,   // right
+                -orto.gameareaCamOrthoUnits,                  // bottom
+                orto.gameareaCamOrthoUnits,                   // top
+                orto.cam1Near,
+                orto.cam1Far) :
+            m4.perspective(degToRad(settings.fov), gameareaAspect, camera.near, camera.far);
+
         const cameraPosition = getCameraPos();
         const target = [0, camera.z, 0];
         const up = [0, 1, 0];
         const cameraMatrix = m4.lookAt(cameraPosition, target, up);
         const viewMatrix = m4.inverse(cameraMatrix);
 
-
-        const near = 1, far = 2000;
-        const aspect = gameareaAspect;
-        const projectionMatrix =
-            m4.perspective(degToRad(settings.fov), aspect, near, far);
 
         const viewProjectionMatrix = m4.multiply(projectionMatrix, viewMatrix);
 
@@ -432,10 +479,10 @@ function main() {
 
         const minimapProjectionMatrix =
             m4.orthographic(
-                -orto.minimapCam1OrthoUnits * minimapAspect,  // left
-                orto.minimapCam1OrthoUnits * minimapAspect,   // right
-                -orto.minimapCam1OrthoUnits,                  // bottom
-                orto.minimapCam1OrthoUnits,                   // top
+                -orto.minimapCamOrthoUnits * minimapAspect,  // left
+                orto.minimapCamOrthoUnits * minimapAspect,   // right
+                -orto.minimapCamOrthoUnits,                  // bottom
+                orto.minimapCamOrthoUnits,                   // top
                 orto.cam1Near,
                 orto.cam1Far);
 
@@ -472,10 +519,10 @@ function main() {
 
         const selectorProjectionMatrix =
             m4.orthographic(
-                -orto.selectorCam1OrthoUnits * selectorAspect,  // left
-                orto.selectorCam1OrthoUnits * selectorAspect,   // right
-                -orto.selectorCam1OrthoUnits,                  // bottom
-                orto.selectorCam1OrthoUnits,                   // top
+                -orto.selectorCamOrthoUnits * selectorAspect,  // left
+                orto.selectorCamOrthoUnits * selectorAspect,   // right
+                -orto.selectorCamOrthoUnits,                  // bottom
+                orto.selectorCamOrthoUnits,                   // top
                 orto.cam1Near,
                 orto.cam1Far);
 
@@ -516,21 +563,24 @@ function main() {
         gl.readPixels(pixelX, pixelY, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, data);
         const id = data[0] + (data[1] << 8) + (data[2] << 16) + (data[3] << 24);
 
+        function resetSquare(square) {
+            square.transform = m4.identity();
+            square.selected = false;
+            squareLookedAt = 0;
+            oldPickNdx = -1;
+        }
+
         // restore
         if (oldPickNdx >= 0) {
             if (oldPickNdx <= scacchiera.length) {
                 /**@type Square*/const object = scacchiera.filter(s => s.id == oldPickNdx)[0]
                 if (object) {
-                    object.transform = m4.identity();
-                    object.selected = false;
-                    oldPickNdx = -1;
+                    resetSquare(object);
                 }
             } else if (oldPickNdx > scacchiera.length) {
                 const object = scacchiera.filter(s => s.id + scacchiera.length == oldPickNdx)[0]
                 if (object) {
-                    object.transform = m4.identity();
-                    object.selected = false;
-                    oldPickNdx = -1;
+                    resetSquare(object);
                 }
             }
         }
@@ -542,6 +592,7 @@ function main() {
             if (id <= scacchiera.length) { // looking at a square
                 /**@type Square*/const object = scacchiera.filter(s => s.id == id)[0]
                 if (object) {
+                    squareLookedAt = id;
                     if (object.skyscraper === 0) { // empty square 
                         object.transform = m4.scale(m4.identity(), .9, 1, .9)
                     }
@@ -559,6 +610,7 @@ function main() {
             } else if (id > scacchiera.length && id <= 2 * scacchiera.length) { // looking at a skyscraper
                 /**@type Square*/const object = scacchiera.filter(s => s.id + scacchiera.length == id)[0]
                 if (object) {
+                    squareLookedAt = object.id;
                     object.transform = m4.scale(m4.identity(), .9, 1, .9)
 
                     object.selected = true;
@@ -570,8 +622,8 @@ function main() {
                             object.skyscraper = selectedSquare.skyscraper
                             selectedSquare.skyscraper = 0
                         }
-                        selectedSquare = null;
                         object.selected = false;
+                        selectedSquare = null;
                     }
                     if (selectedSkyscraper > 0 && !dragging) {
                         object.skyscraper = selectedSkyscraper;
@@ -688,31 +740,6 @@ function main() {
 
     let startMousePos;
 
-    function handleMouseMove(e) {
-        camera.angleX += -1 / camera.slowness * (startMousePos[0] - e.clientX);
-        camera.angleY += 1 / camera.slowness * (startMousePos[1] - e.clientY);
-        if (camera.angleX > 360) {
-            camera.angleX = 0
-        }
-        if (camera.angleX < 0) {
-            camera.angleX = 360
-        }
-        if (camera.angleY >= 90) {
-            camera.angleY = 89.99
-        }
-        if (camera.angleY <= 0) {
-            camera.angleY = 0.01
-        }
-        startMousePos = [e.clientX, e.clientY];
-    }
-
-    function handleMouseUp(e) {
-        dragging = false;
-        movingView = false;
-        window.removeEventListener('mousemove', handleMouseMove);
-        window.removeEventListener('mouseup', handleMouseUp);
-    }
-
     canvas.addEventListener('mousedown', (e) => {
         e.preventDefault();
 
@@ -727,7 +754,7 @@ function main() {
         startMousePos = [e.clientX, e.clientY];
     });
 
-    gl.canvas.addEventListener('mousemove', (e) => {
+    canvas.addEventListener('mousemove', (e) => {
         const rect = canvas.getBoundingClientRect();
         mouseX = e.clientX - rect.left;
         mouseY = e.clientY - rect.top;
@@ -736,12 +763,111 @@ function main() {
     canvas.addEventListener('wheel', (e) => {
         e.preventDefault();
 
-        // multiply the wheel movement by the current zoom level
-        // so we zoom less when zoomed in and more when zoomed out
-        const newZoom = camera.zoom * Math.pow(2, e.deltaY * 0.001);
-        camera.zoom = Math.max(camera.minZoom, Math.min(camera.maxZoom, newZoom));
+        if (!camera.orto) {
+            // zoom less when zoomed in and more when zoomed out
+            const newZoom = camera.zoom * Math.pow(2, e.deltaY * 0.001);
+            camera.zoom = Math.max(camera.minZoom, Math.min(camera.maxZoom, newZoom));
+        }
     });
 
+    document.addEventListener('keydown', function (event) {
+        const key = event.key; // "a", "1", "Shift", etc.
+
+        switch (key.toLowerCase()) {
+            case "w":
+                rotateUp();
+                break;
+            case "a":
+                rotateLeft();
+                break;
+            case "s":
+                rotateDown();
+                break;
+            case "d":
+                rotateRight();
+                break;
+            case "q":
+                changeViewSnapLeft();
+                break;
+            case "e":
+                changeViewSnapRight();
+                break;
+        }
+    });
+
+
+    function correctAngles() {
+        camera.orto = false;
+        if (camera.angleX <= 0) {
+            camera.angleX = 360
+        } else if (camera.angleX >= 360) {
+            camera.angleX = 0
+        }
+        if (camera.angleY >= 90) {
+            camera.angleY = 89.99
+        }
+        if (camera.angleY <= 0) {
+            camera.angleY = 0.01
+        }
+    }
+
+    function handleMouseMove(e) {
+        camera.orto = false;
+        camera.angleX += -1 / camera.slowness * (startMousePos[0] - e.clientX);
+        camera.angleY += 1 / camera.slowness * (startMousePos[1] - e.clientY);
+
+        correctAngles();
+
+        startMousePos = [e.clientX, e.clientY];
+    }
+
+    function handleMouseUp(e) {
+        dragging = false;
+        movingView = false;
+        window.removeEventListener('mousemove', handleMouseMove);
+        window.removeEventListener('mouseup', handleMouseUp);
+    }
+
+    function rotateRight() {
+        camera.angleX -= camera.keyMovement;
+        correctAngles();
+    }
+    function rotateLeft() {
+        camera.angleX += camera.keyMovement;
+        correctAngles();
+    }
+    function rotateUp() {
+        camera.angleY -= camera.keyMovement;
+        correctAngles();
+    }
+    function rotateDown() {
+        camera.angleY += camera.keyMovement;
+        correctAngles();
+    }
+    function changeViewSnapRight() {
+        if (camera.orto) {
+            camera.angleX -= 90;
+            if (camera.angleX < 0) {
+                camera.angleX = 270;
+            }
+        } else {
+            camera.angleX = Math.round(camera.angleX / 90) * 90;;
+        }
+        camera.angleY = 90;
+        camera.orto = true;
+    }
+    function changeViewSnapLeft() {
+        if (camera.orto) {
+            camera.angleX += 90;
+            if (camera.angleX > 360) {
+                camera.angleX = 90;
+            }
+        } else {
+            camera.angleX = Math.round(camera.angleX / 90) * 90;;
+        }
+        camera.angleY = 90;
+        camera.orto = true;
+    }
 
     // Create text nodes to save some time for the browser.
     var angleXNode = document.createTextNode("");

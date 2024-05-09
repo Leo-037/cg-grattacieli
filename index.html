@@ -12,18 +12,26 @@
         html,
         head,
         body {
-            margin: 0;
+            margin: auto;
             padding: 5px;
             background-color: #2a2a2a;
         }
 
         #canvas {
-            width: 1000px;
-            height: 700px;
+            width: 1200px;
+            height: 900px;
             background-color: #da6052;
+            display: inline;
         }
 
+        #canvas-container {
+            width: 100%;
+            text-align: center;
+        }
+
+
         #error-box {
+            margin: auto;
             color: #fd8080;
             font-weight: 500;
             font-size: 18pt;
@@ -57,10 +65,12 @@
 
 <body>
     <div class="container">
-        <canvas id="canvas">
-            <!-- This message shows up only if the Canvas element isn't supported -->
-            HTML5 canvas not supported in your browser!
-        </canvas>
+        <div id="canvas-container">
+            <canvas id="canvas">
+                <!-- This message shows up only if the Canvas element isn't supported -->
+                HTML5 canvas not supported in your browser!
+            </canvas>
+        </div>
 
         <div id="overlay" hidden>
             <div>AngleX: <span id="info-angleX"></span></div>
@@ -106,6 +116,7 @@
 
         uniform sampler2D u_texture;
         uniform vec3 u_reverseLightDirection;
+        uniform bool u_light;
 
         void main() {
             vec3 normal = normalize(v_normal);
@@ -113,7 +124,10 @@
             float light = dot(normal, u_reverseLightDirection);
 
             gl_FragColor = texture2D(u_texture, v_texcoord);
-            gl_FragColor.rgb *= light;
+            if (u_light) {
+                gl_FragColor.rgb *= light;
+            }
+             
         }
     </script>
 

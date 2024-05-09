@@ -196,29 +196,41 @@
     <script id="solid-color-vertex-shader" type="x-shader/x-vertex">
         attribute vec4 a_position;
         attribute vec3 a_normal;
-
+        
         uniform mat4 projection, modelview, normalMat; // invert transpose
-
-        uniform int mode;   // Rendering mode
-        uniform float Ka;   // Ambient reflection coefficient
-        uniform float Kd;   // Diffuse reflection coefficient
-        uniform float Ks;   // Specular reflection coefficient
-        uniform float shininessVal; // Shininess
-        // Material color
-        uniform vec3 ambientColor;
-        uniform vec3 diffuseColor;
-        uniform vec3 specularColor;
-        uniform vec3 lightPos; // Light position
-
+        
         varying vec3 normalInterp;
         varying vec3 vertPos;
-        varying vec4 color; //color
 
         void main() {
             vec4 vertPos4 = modelview * a_position;
             vertPos = vec3(vertPos4) / vertPos4.w;
             normalInterp = vec3(normalMat * vec4(a_normal, 0.0));
             gl_Position = projection * vertPos4;
+        }
+
+    </script>
+
+    <script id="solid-color-fragment-shader" type="x-shader/x-fragment">
+        precision mediump float;
+
+        varying vec3 normalInterp;
+        varying vec3 vertPos;
+
+        uniform int mode;   // 1 - normal, 2 - ambient, 3 - diffuse, 4 - specular
+        uniform float Ka;   // Ambient reflection coefficient
+        uniform float Kd;   // Diffuse reflection coefficient
+        uniform float Ks;   // Specular reflection coefficient
+        uniform float shininessVal;
+
+        // Material color
+        uniform vec3 ambientColor;
+        uniform vec3 diffuseColor;
+        uniform vec3 specularColor;
+        uniform vec3 lightPos; 
+                
+        void main() {
+            vec4 color;
 
             vec3 N = normalize(normalInterp);
             vec3 L = normalize(lightPos - vertPos);
@@ -242,16 +254,7 @@
             if(mode == 3) color = vec4(Kd * lambertian * diffuseColor, 1.0);
             // only specular
             if(mode == 4) color = vec4(Ks * specular * specularColor, 1.0);
-        }
 
-    </script>
-
-    <script id="solid-color-fragment-shader" type="x-shader/x-fragment">
-        precision mediump float;
-
-        varying vec4 color;
-        
-        void main() {
             gl_FragColor = color;
         }
     </script>

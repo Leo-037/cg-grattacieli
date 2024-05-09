@@ -107,7 +107,7 @@ function main() {
     }
     const light = {
         x: 0, y: 10, z: 0,
-        mode: 1,
+        mode: 1, // 1 - normal, 2 - ambient, 3 - diffuse, 4 - specular
         Ka: 0.7, Kd: .35, Ks: 0,
         shininessVal: 80,
     }
@@ -300,7 +300,7 @@ function main() {
                         projection: m4.multiply(projectionMatrix, viewMatrix),
                         modelview: worldMatrix,
                         normalMat: m4.transpose(m4.inverse(worldMatrix)),
-                        mode: light.mode, // 1 - normal, 2 - ambient, 3 - diffuse, 4 - specular
+                        mode: light.mode,
                         Ka: 1.0,     // ambient
                         Kd: 1.0,     // diffuse
                         Ks: light.Ks,     // specular
@@ -319,7 +319,7 @@ function main() {
                     projection: m4.multiply(projectionMatrix, viewMatrix),
                     modelview: worldMatrix,
                     normalMat: m4.transpose(m4.inverse(worldMatrix)),
-                    mode: light.mode, // 1 - normal, 2 - ambient, 3 - diffuse, 4 - specular
+                    mode: light.mode, 
                     Ka: light.Ka,     // ambient
                     Kd: light.Kd,     // diffuse
                     Ks: light.Ks,     // specular
@@ -758,8 +758,7 @@ function main() {
     });
 
     document.addEventListener('keydown', function (event) {
-        const key = event.key; // "a", "1", "Shift", etc.
-
+        const key = event.key; 
         switch (key.toLowerCase()) {
             case "w":
                 rotateUp();

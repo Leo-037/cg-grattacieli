@@ -1,7 +1,9 @@
 "use strict"
 
 import { cube_colors, cube_indices, cube_normals, cube_vertices, square_indices, square_normals, square_textcoords, square_vertices } from "./geometry.js";
-import { degToRad, getRandomInt, loadTexture } from "./resources/myutils.js"
+import { LoadMesh, degToRad, getRandomInt, loadTexture } from "./resources/myutils.js"
+
+var meshData = new Array();
 
 const numberTextureInfo = {
     size: 512,
@@ -66,7 +68,7 @@ function getTextureCoordinatesForNumber(n) {
         texcoords[offset + 6] = u1;
         texcoords[offset + 7] = v2;
     }
-    // console.log(texcoords)
+
     return texcoords;
 }
 
@@ -116,8 +118,15 @@ function main() {
     // gui.close();
     // gui.add(orto, 'selectorCamOrthoUnits')
 
+    meshData.sourceMesh='data/skyscraper/skyscraper.obj';
+    var mesh = LoadMesh(gl, meshData);
+
     const squareBufferInfo = createSquareBufferInfo(gl);
-    const grattacieloBufferInfo = createCubeBufferInfo(gl);
+    const grattacieloBufferInfo = webglUtils.createBufferInfoFromArrays(gl, {
+        position: { numComponents: 3, data: new Float32Array(mesh.positions) },
+        texcoord: { numComponents: 2, data: new Float32Array(mesh.texcoords) },
+        normal: { numComponents: 3, data: new Float32Array(mesh.normals) },
+    }); 
 
     const numbersBufferInfos = {}
     for (let i = 0; i < settings.dimScacchiera + 1; i++) {
@@ -206,7 +215,7 @@ function main() {
     function getCameraPos() {
         const X = camera.zoom * Math.cos(degToRad(camera.angleX)) * Math.sin(degToRad(camera.angleY))
         const Z = camera.zoom * Math.sin(degToRad(camera.angleX)) * Math.sin(degToRad(camera.angleY))
-        const Y = camera.z / 2 + camera.zoom * Math.cos(degToRad(camera.angleY))
+        const Y = camera.z + camera.zoom * Math.cos(degToRad(camera.angleY))
 
         return [X, Y, Z]
     }
@@ -300,10 +309,7 @@ function main() {
                         projection: m4.multiply(projectionMatrix, viewMatrix),
                         modelview: worldMatrix,
                         normalMat: m4.transpose(m4.inverse(worldMatrix)),
-                        mode: light.mode,
-                        Ka: 1.0,     // ambient
-                        Kd: 1.0,     // diffuse
-                        Ks: light.Ks,     // specular
+                        mode: light.mode, Ka: 1.0, Kd: 1.0, Ks: light.Ks,
                         shininessVal: light.shininessVal,
                         ambientColor: colors[skyscraper],
                         diffuseColor: colors[skyscraper],
@@ -319,7 +325,7 @@ function main() {
                     projection: m4.multiply(projectionMatrix, viewMatrix),
                     modelview: worldMatrix,
                     normalMat: m4.transpose(m4.inverse(worldMatrix)),
-                    mode: light.mode, 
+                    mode: light.mode,
                     Ka: light.Ka,     // ambient
                     Kd: light.Kd,     // diffuse
                     Ks: light.Ks,     // specular
@@ -758,7 +764,7 @@ function main() {
     });
 
     document.addEventListener('keydown', function (event) {
-        const key = event.key; 
+        const key = event.key;
         switch (key.toLowerCase()) {
             case "w":
                 rotateUp();

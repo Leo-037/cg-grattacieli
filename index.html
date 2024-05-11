@@ -4,7 +4,7 @@
 
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1"/>
 
     <title>Skyscrapers</title>
 
@@ -18,8 +18,8 @@
 
         #canvas-container {
             margin: auto;
-            width: 100vw;
-            height: 100vh;
+            width: 100dvw;
+            height: 100dvh;
             max-width: calc(100vh * 1.25);
             max-height: calc(100vw * 0.8);
         }
@@ -73,10 +73,11 @@
             </canvas>
         </div>
 
-        <div id="overlay" hidden>
+        <div id="overlay" hidden> 
             <div>AngleX: <span id="info-angleX"></span></div>
             <div>AngleY: <span id="info-angleY"></span></div>
             <div>Id: <span id="info-id"></span></div>
+            <div>Debug: <span id="info-extra"></span></div>
         </div>
     </div>
 

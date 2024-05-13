@@ -4,7 +4,7 @@
 
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1"/>
+    <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1" />
 
     <title>Skyscrapers</title>
 
@@ -28,7 +28,7 @@
             width: 100%;
             height: 100%;
             aspect-ratio: 5/4;
-            background-color: #da6052;
+            background-color: rgb(78, 178, 128);
         }
 
         #error-box {
@@ -53,13 +53,52 @@
         #overlay {
             position: absolute;
             left: 10px;
-            /* 870 */
             top: 10px;
-            /* 620 */
             background-color: rgba(0, 0, 0, 0.7);
             color: white;
             font-family: monospace;
             padding: 1em;
+        }
+
+        #level-selector {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            text-align: center;
+            vertical-align: middle;
+            transform: translateX(-50%) translateY(-50%);
+            font-size: 1.5rem;
+        }
+
+        #levels {
+            font-size: 1.5rem;
+            padding: 10px;
+            margin: 5px;
+        }
+
+        .button {
+            font-size: 2rem;
+            padding: 10px;
+            border: 2px solid black;
+            box-shadow: 0 8px 16px 0 rgba(0,0,0,0.2), 0 6px 20px 0 rgba(0,0,0,0.19);
+        }
+
+        .button:hover {
+            background-color: rgb(42, 97, 70);
+            color: #ffffff;
+        }
+
+
+        #message-area {
+            position: absolute;
+            font-size: xx-large;
+            left: 50%;
+            width: 100%;
+            text-align: center;
+            vertical-align: middle;
+            transform: translateX(-50%) translateY(-100%);
+            backdrop-filter: blur(10px);
+            color: rgb(222, 16, 229);
         }
     </style>
 </head>
@@ -68,12 +107,41 @@
     <div class="container">
         <div id="canvas-container">
             <canvas id="canvas">
-                <!-- This message shows up only if the Canvas element isn't supported -->
-                HTML5 canvas not supported in your browser!
+                HTML5 canvas not supported in your browser or not working!
             </canvas>
+            <div id="message-area" hidden>
+                <h1>
+                    Hai vinto!
+                </h1>
+            </div>
+            <div id="level-selector" class="levelSelector">
+                <h3>
+                    <label for="levels" style="color: #090404">Choose a level</label>
+                    <br>
+                    <select name="levels" id="levels">
+                        <option value="3-1">3x3 - lvl 1 (tutorial)</option>
+                        <option disabled>──────────</option>
+                        <option value="4-1">4x4 - lvl 1 (easy)</option>
+                        <option value="4-2">4x4 - lvl 2 (normal)</option>
+                        <option value="4-3">4x4 - lvl 3 (hard)</option>
+                        <option disabled>──────────</option>
+                        <option value="5-1">5x5 - lvl 1 (easy)</option>
+                        <option value="5-2">5x5 - lvl 2 (normal)</option>
+                        <option value="5-3">5x5 - lvl 3 (normal)</option>
+                        <option value="5-4">5x5 - lvl 4 (hard)</option>
+                        <option value="5-5">5x5 - lvl 5 (hard)</option>
+                        <option disabled>──────────</option>
+                        <option value="6-1">6x6 - lvl 1 (normal)</option>
+                        <option value="6-2">6x6 - lvl 2 (hard)</option>
+                        <option value="6-3">6x6 - lvl 3 (hard)</option>
+                    </select>
+                    <br><br>
+                    <button type="button" class="button" id="btnStartgame"><strong>Start game</strong></button>
+                </h3>
+            </div>
         </div>
 
-        <div id="overlay" hidden> 
+        <div id="overlay" hidden>
             <div>AngleX: <span id="info-angleX"></span></div>
             <div>AngleY: <span id="info-angleY"></span></div>
             <div>Id: <span id="info-id"></span></div>
@@ -81,7 +149,7 @@
         </div>
     </div>
 
-    <div id="error-box">
+    <div id="error-box" hidden>
         <span class="error-box-title"></span>
     </div>
 

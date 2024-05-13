@@ -1,13 +1,22 @@
 "use strict"
 
-import { cube_colors, cube_indices, cube_normals, cube_vertices, square_indices, square_normals, square_textcoords, square_vertices } from "./geometry.js";
+import { cube_colors, cube_indices, cube_normals, cube_vertices, square_indices, square_normals, square_textcoords, square_vertices } from "./data/geometry.js";
+import { levels } from "./levels.js";
 import { LoadMesh, degToRad, getRandomInt, loadTexture } from "./resources/myutils.js"
 
 var skyscraperMeshData = new Array();
 var binMeshData = new Array();
 
 const BIN = 1;
+const CAMERA_N = 2;
+const CAMERA_E = 3;
+const CAMERA_S = 4;
+const CAMERA_W = 5;
 let binID = -1;
+let cameraNorthID = -1;
+let cameraEastID = -1;
+let cameraSouthID = -1;
+let cameraWestID = -1;
 
 const numberTextureInfo = {
     size: 512,
@@ -24,6 +33,11 @@ const numberTextureInfo = {
         8: { x: 2, y: 1 },
         9: { x: 3, y: 1 },
         0: { x: 4, y: 1 },
+        "N": { x: 0, y: 2 },
+        "E": { x: 1, y: 2 },
+        "S": { x: 2, y: 2 },
+        "W": { x: 3, y: 2 },
+        "V": { x: 4, y: 2 },
     }
 }
 
@@ -33,8 +47,8 @@ const colors = {
     3: m4.normalize([110, 255, 120]),
     4: m4.normalize([255, 200, 0]),
     5: m4.normalize([220, 50, 0]),
-    6: m4.normalize([0, 0, 0]),
-    7: m4.normalize([0, 0, 0]),
+    6: m4.normalize([255, 0, 230]),
+    7: m4.normalize([196, 0, 255]),
     8: m4.normalize([0, 0, 0]),
     9: m4.normalize([0, 0, 0]),
 }
@@ -43,7 +57,7 @@ function toFixedFloat(n, f) {
     return Math.floor((n * 10 ** f).toFixed(f)) / 10 ** f
 }
 
-function getTextureCoordinatesForNumber(n) {
+function getTextureCoordinatesForChar(c) {
     // fill the texture with 1s
     var texcoords = []
     for (let i = 0; i < 48; i++) {
@@ -53,39 +67,51 @@ function getTextureCoordinatesForNumber(n) {
     var maxY = numberTextureInfo.textureHeight;
 
     const offset = 16; // edit the top face
-    if (n >= 0 && n <= 9) {
-        var number = numberTextureInfo.pos[n];
-        var u1 = toFixedFloat(number.x * numberTextureInfo.size / maxX, 2);
-        var v1 = toFixedFloat(1 - ((number.y + 1) * numberTextureInfo.size) / maxY, 2);
-        var u2 = toFixedFloat(((number.x + 1) * numberTextureInfo.size) / maxX, 2);
-        var v2 = toFixedFloat(1 - number.y * numberTextureInfo.size / maxY, 2);
 
-        texcoords[offset + 0] = u1;
-        texcoords[offset + 1] = v1;
+    var char = numberTextureInfo.pos[c];
+    var u1 = toFixedFloat(char.x * numberTextureInfo.size / maxX, 2);
+    var v1 = toFixedFloat(1 - ((char.y + 1) * numberTextureInfo.size) / maxY, 2);
+    var u2 = toFixedFloat(((char.x + 1) * numberTextureInfo.size) / maxX, 2);
+    var v2 = toFixedFloat(1 - char.y * numberTextureInfo.size / maxY, 2);
 
-        texcoords[offset + 2] = u2;
-        texcoords[offset + 3] = v1;
+    // Adjust texture coordinates to avoid bleeding
+    var pixelOffset = 1; // Adjust this value as needed
+    var u1Safe = u1 + pixelOffset / maxX;
+    var v1Safe = v1 + pixelOffset / maxY;
+    var u2Safe = u2 - pixelOffset / maxX;
+    var v2Safe = v2 - pixelOffset / maxY;
 
-        texcoords[offset + 4] = u2;
-        texcoords[offset + 5] = v2;
+    texcoords[offset + 0] = u1Safe;
+    texcoords[offset + 1] = v1Safe;
 
-        texcoords[offset + 6] = u1;
-        texcoords[offset + 7] = v2;
-    }
+    texcoords[offset + 2] = u2Safe;
+    texcoords[offset + 3] = v1Safe;
+
+    texcoords[offset + 4] = u2Safe;
+    texcoords[offset + 5] = v2Safe;
+
+    texcoords[offset + 6] = u1Safe;
+    texcoords[offset + 7] = v2Safe;
 
     return texcoords;
 }
 
-function main() {
+let playingGame = false;
+let gameWon = false;
+
+function startGame(settings) {
     /** @type {HTMLCanvasElement} */
     const canvas = document.querySelector('#canvas');
-    const gl = canvas.getContext('webgl');
+    const gl = canvas.getContext('webgl', {
+        // premultipliedAlpha: false,
+        antialias: false,
+    });
     if (!gl) {
         return;
     }
 
-    const settings = {
-        dimScacchiera: 5,
+    const options = {
+
     }
     const camera = {
         fov: 40,
@@ -96,7 +122,7 @@ function main() {
         maxZoom: 100,
         angleX: 70,
         angleY: 70,
-        slowness: 10,
+        slowness: 5,
         z: 4.5,
         keyMovement: 3,
         orto: false,
@@ -108,8 +134,8 @@ function main() {
         gameareaSnapAngleX: 0,
         gameareaSnapAngleY: 0,
         gameareaCamOrthoUnits: 10,
-        minimapCamOrthoUnits: settings.dimScacchiera + 5,
-        selectorCamOrthoUnits: settings.dimScacchiera + 1.5,
+        minimapCamOrthoUnits: settings.boardSize + 5,
+        selectorCamOrthoUnits: settings.boardSize + 1.5,
     }
     const light = {
         x: 0, y: 10, z: 0,
@@ -118,14 +144,10 @@ function main() {
         shininessVal: 80,
     }
 
-    // var gui = new dat.GUI();
-    // gui.close();
-    // gui.add(orto, 'selectorCamOrthoUnits')
-
     skyscraperMeshData.sourceMesh = 'data/skyscraper/skyscraper.obj';
     var skyscraperMesh = LoadMesh(gl, skyscraperMeshData);
 
-    binMeshData.sourceMesh = 'data/bin/bin.obj';
+    binMeshData.sourceMesh = 'data/trashbin/bin.obj';
     var binMesh = LoadMesh(gl, binMeshData);
 
     const squareBufferInfo = createSquareBufferInfo(gl);
@@ -134,14 +156,15 @@ function main() {
     const cubeBufferInfo = createCubeBufferInfo(gl);
 
     const numbersBufferInfos = {}
-    for (let i = 0; i < settings.dimScacchiera + 1; i++) {
-        numbersBufferInfos[i] = webglUtils.createBufferInfoFromArrays(gl, {
-            position: { numComponents: 3, data: new Float32Array(square_vertices) },
-            texcoord: { numComponents: 2, data: new Float32Array(getTextureCoordinatesForNumber(i)) },
-            normal: { numComponents: 3, data: new Float32Array(square_normals) },
-            indices: { numComponents: 3, data: new Uint16Array(square_indices) },
-        });
+    for (let i = 0; i <= settings.boardSize; i++) {
+        numbersBufferInfos[i] = createCharacterSquareBufferInfo(gl, i);
     }
+
+    numbersBufferInfos["N"] = createCharacterSquareBufferInfo(gl, "N");
+    numbersBufferInfos["E"] = createCharacterSquareBufferInfo(gl, "E");
+    numbersBufferInfos["S"] = createCharacterSquareBufferInfo(gl, "S");
+    numbersBufferInfos["W"] = createCharacterSquareBufferInfo(gl, "W");
+    numbersBufferInfos["V"] = createCharacterSquareBufferInfo(gl, "V");
 
     const pickingProgramInfo = webglUtils.createProgramInfo(gl, ["pick-vertex-shader", "pick-fragment-shader"]);
     const texturedProgramInfo = webglUtils.createProgramInfo(gl, ['simple-texture-vertex-shader-3d', 'simple-texture-fragment-shader-3d']);
@@ -179,52 +202,47 @@ function main() {
         }
     }
 
-    class Number {
-        constructor(x, z, n) {
-            this.x = x;
-            this.z = z;
-            this.n = n;
-        }
+    function getPosFromIndex(i) {
+        return (i / (settings.boardSize - 1) - .5) * 2 * (settings.boardSize - 1)
     }
 
-    let scacchiera = [];
+    let board = [];
 
     let id = 0;
-    if (settings.dimScacchiera > 1) {
-        for (var zz = 0; zz < settings.dimScacchiera; ++zz) {
-            var v = zz / (settings.dimScacchiera - 1);
-            var z = (v - .5) * 2 * (settings.dimScacchiera - 1);
-            for (var xx = 0; xx < settings.dimScacchiera; ++xx) {
-                var u = xx / (settings.dimScacchiera - 1);
-                var x = (u - .5) * 2 * (settings.dimScacchiera - 1);
+    if (settings.boardSize > 1) {
+        for (var zz = 0; zz < settings.boardSize; ++zz) {
+            var z = getPosFromIndex(zz)
+            for (var xx = 0; xx < settings.boardSize; ++xx) {
+                var x = getPosFromIndex(xx);
                 id += 1;
                 const square = new Square(x, z, id);
-                scacchiera.push(square);
+                board.push(square);
             }
         }
     }
 
-    const partita = [
-        1, 4, 3, 2, 2,
-        3, 4, 1, 2, 2,
-        4, 2, 1, 2, 3,
-        3, 2, 3, 2, 1]
-    let numeriAttorno = [];
-    for (let i = 0; i < settings.dimScacchiera; i++) {
-        let d1 = (i / (settings.dimScacchiera - 1) - .5) * 2 * (settings.dimScacchiera - 1);
-        let d2 = settings.dimScacchiera + 1;
-        numeriAttorno.push(new Number(d1, d2, settings.dimScacchiera === 5 ? partita[i + 0] : getRandomInt(1, settings.dimScacchiera)));
-        numeriAttorno.push(new Number(d2, d1, settings.dimScacchiera === 5 ? partita[i + 1 * settings.dimScacchiera] : getRandomInt(1, settings.dimScacchiera)));
-        numeriAttorno.push(new Number(d1, -d2, settings.dimScacchiera === 5 ? partita[i + 2 * settings.dimScacchiera] : getRandomInt(1, settings.dimScacchiera)));
-        numeriAttorno.push(new Number(-d2, d1, settings.dimScacchiera === 5 ? partita[i + 3 * settings.dimScacchiera] : getRandomInt(1, settings.dimScacchiera)));
+    const inGame = settings.boardSize === settings.disposition.length / 4;
+    let numbersAround = [];
+    for (let i = 0; i < settings.boardSize; i++) {
+        let p1 = getPosFromIndex(i);
+        let p2 = settings.boardSize + 1;
+        // top left to right
+        numbersAround.push(new Number(p1, -p2, inGame ? settings.disposition[i + 0] : getRandomInt(1, settings.boardSize)));
+        // right top to bottom
+        numbersAround.push(new Number(p2, p1, inGame ? settings.disposition[i + 1 * settings.boardSize] : getRandomInt(1, settings.boardSize)));
+        // bottom left to right
+        numbersAround.push(new Number(p1, p2, inGame ? settings.disposition[i + 2 * settings.boardSize] : getRandomInt(1, settings.boardSize)));
+        // left top to bottom
+        numbersAround.push(new Number(-p2, p1, inGame ? settings.disposition[i + 3 * settings.boardSize] : getRandomInt(1, settings.boardSize)));
     }
 
-    // generate some skyscrapers in random spots
-    for (let i = 0; i < settings.dimScacchiera * 2; i++) {
-    /**@type Square*/let square = scacchiera[Math.floor(Math.random() * scacchiera.length)];;
-        square.skyscraper = getRandomInt(1, settings.dimScacchiera + 1);
+    if (true || !inGame) {
+        // generate some skyscrapers in random spots
+        for (let i = 0; i < settings.boardSize * 2; i++) {
+            let square = board[Math.floor(Math.random() * board.length)];;
+            square.skyscraper = getRandomInt(1, settings.boardSize + 1);
+        }
     }
-
 
     // computes the camera position as it orbits around the center
     function getCameraPos() {
@@ -295,8 +313,7 @@ function main() {
     }
 
     function drawScene(projectionMatrix, viewMatrix, tileRotation, minimap = false) {
-
-        scacchiera.forEach((/** @type Square */ square) => {
+        board.forEach((/** @type Square */ square) => {
             let worldMatrix = m4.translate(m4.identity(), square.x, 0, square.z);
             worldMatrix = m4.multiply(worldMatrix, square.transform);
 
@@ -353,7 +370,7 @@ function main() {
             }
         });
 
-        numeriAttorno.forEach((/** @type Number */num) => {
+        numbersAround.forEach((/** @type Number */num) => {
             let worldMatrix = m4.translate(m4.identity(), num.x, 0, num.z);
             worldMatrix = m4.yRotate(worldMatrix, degToRad(tileRotation));
             if (!minimap && camera.orto) {
@@ -381,16 +398,21 @@ function main() {
                 u_reverseLightDirection: m4.normalize([0, light.y, 0])
             });
         }
-        var worldMatrix = m4.translate(m4.identity(), settings.dimScacchiera + 1, 0, settings.dimScacchiera + 1);
-        drawEmptySquare(worldMatrix)
-        var worldMatrix = m4.translate(m4.identity(), -(settings.dimScacchiera + 1), 0, settings.dimScacchiera + 1);
-        drawEmptySquare(worldMatrix)
-        var worldMatrix = m4.translate(m4.identity(), settings.dimScacchiera + 1, 0, -(settings.dimScacchiera + 1));
-        drawEmptySquare(worldMatrix)
-        var worldMatrix = m4.translate(m4.identity(), -(settings.dimScacchiera + 1), 0, -(settings.dimScacchiera + 1));
-        drawEmptySquare(worldMatrix)
+        var worldMatrix = m4.translate(m4.identity(), settings.boardSize + 1, 0, settings.boardSize + 1);
+        drawEmptySquare(worldMatrix);
+        var worldMatrix = m4.translate(m4.identity(), -(settings.boardSize + 1), 0, settings.boardSize + 1);
+        drawEmptySquare(worldMatrix);
+        var worldMatrix = m4.translate(m4.identity(), settings.boardSize + 1, 0, -(settings.boardSize + 1));
+        drawEmptySquare(worldMatrix);
+        var worldMatrix = m4.translate(m4.identity(), -(settings.boardSize + 1), 0, -(settings.boardSize + 1));
+        drawEmptySquare(worldMatrix);
     }
 
+    let gameareaHeight;
+    let gameareaWidth;
+    let gameareaAspect;
+    let gameareaX;
+    let gameareaY;
 
     let mouseX = -1;
     let mouseY = -1;
@@ -401,7 +423,7 @@ function main() {
     let holding = false;
     let movingView = false;
 
-    const selectorOffset = 2 * scacchiera.length + settings.dimScacchiera;
+    const selectorOffset = 2 * board.length + settings.boardSize;
 
     let squareLookedAt = 0;
     let selectedSquare = null;
@@ -414,11 +436,11 @@ function main() {
             setFramebufferAttachmentSizes(gl.canvas.width, gl.canvas.height);
         }
 
-        const gameareaHeight = Math.ceil(gl.canvas.height * (4 / 5));
-        const gameareaWidth = gameareaHeight; // gl.canvas.width * (2 / 3);
-        const gameareaAspect = gameareaWidth / gameareaHeight;
-        const gameareaX = 0;
-        const gameareaY = gl.canvas.height - gameareaHeight;
+        gameareaHeight = Math.ceil(gl.canvas.height * (4 / 5));
+        gameareaWidth = gameareaHeight; // gl.canvas.width * (2 / 3);
+        gameareaAspect = gameareaWidth / gameareaHeight;
+        gameareaX = 0;
+        gameareaY = gl.canvas.height - gameareaHeight;
 
         const minimapWidth = gl.canvas.width - gameareaWidth;
         const minimapHeight = minimapWidth;
@@ -472,7 +494,7 @@ function main() {
 
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-        scacchiera.forEach((/**@type Square*/ square) => {
+        board.forEach((/**@type Square*/ square) => {
             let worldMatrix = m4.translate(m4.identity(), square.x, 0, square.z);
 
             drawObject(pickingProgramInfo, squareBufferInfo, {
@@ -487,7 +509,7 @@ function main() {
 
                 drawObject(pickingProgramInfo, grattacieloBufferInfo, {
                     u_world: worldMatrix,
-                    u_id: getId(square.id + scacchiera.length),
+                    u_id: getId(square.id + board.length),
                     u_viewProjection: viewProjectionMatrix,
                 });
             }
@@ -513,7 +535,7 @@ function main() {
 
         const minimapViewProjectionMatrix = m4.multiply(minimapProjectionMatrix, minimapViewMatrix);
 
-        scacchiera.forEach((/**@type Square*/ square) => {
+        board.forEach((/**@type Square*/ square) => {
             let worldMatrix = m4.translate(m4.identity(), square.x, 0, square.z);
 
             drawObject(pickingProgramInfo, squareBufferInfo, {
@@ -528,11 +550,34 @@ function main() {
 
                 drawObject(pickingProgramInfo, grattacieloBufferInfo, {
                     u_world: worldMatrix,
-                    u_id: getId(square.id + scacchiera.length),
+                    u_id: getId(square.id + board.length),
                     u_viewProjection: minimapViewProjectionMatrix,
                 });
             }
         });
+
+        function drawSquareForTexture(worldMatrix, id) {
+            worldMatrix = m4.yRotate(worldMatrix, degToRad(0));
+            drawObject(pickingProgramInfo, numbersBufferInfos[0], {
+                u_world: worldMatrix, u_id: getId(id),
+                u_viewProjection: minimapViewProjectionMatrix,
+            });
+        }
+
+        var distance = getPosFromIndex(settings.boardSize + 1) + 1;
+        cameraEastID = selectorOffset + 2;
+        var worldMatrix = m4.translate(m4.identity(), distance, 0, 0);
+        drawSquareForTexture(worldMatrix, cameraEastID);
+        cameraWestID = selectorOffset + 3;
+        var worldMatrix = m4.translate(m4.identity(), -distance, 0, 0);
+        drawSquareForTexture(worldMatrix, cameraWestID);
+        cameraSouthID = selectorOffset + 4;
+        var worldMatrix = m4.translate(m4.identity(), 0, 0, distance);
+        drawSquareForTexture(worldMatrix, cameraSouthID);
+        cameraNorthID = selectorOffset + 5;
+        var worldMatrix = m4.translate(m4.identity(), 0, 0, -distance);
+        drawSquareForTexture(worldMatrix, cameraNorthID);
+
 
         gl.viewport(selectorX, selectorY, selectorWidth, selectorHeight);
         gl.scissor(selectorX, selectorY, selectorWidth, selectorHeight);
@@ -553,7 +598,7 @@ function main() {
 
         const selectorViewProjectionMatrix = m4.multiply(selectorProjectionMatrix, selectorViewMatrix);
 
-        var n = settings.dimScacchiera + 1; // all skyscrapers + the bin
+        var n = settings.boardSize + 1; // all skyscrapers + the bin
         var size = 1.5;
         var radius = Math.sqrt(2 * (size ** 2)); // the size of the diagonal of the skyscrapers
         var occupiedSpace = 2 * radius * n; // the space taken up by all skyscrapers
@@ -562,13 +607,33 @@ function main() {
 
         var spacing = ((width - occupiedSpace) / nSpaces); // the distance between objects
         var xOffset = - width / 2 + radius; // the starting point to draw the row
-        var yOffset = -(settings.dimScacchiera * size) / 2;
+        var yOffset = -(settings.boardSize * size) / 2;
 
         var binSize = 2;
         var binHeight = 3;
+
+        // the skyscrapers
+        for (let i = 1; i < n; i++) {
+            const height = i;
+            const xPos = xOffset + spacing * (i) + 2 * radius * (i - 1);
+            const yPos = yOffset + (height / size);
+
+            let worldMatrix = m4.identity();
+            worldMatrix = m4.translate(worldMatrix, xPos, yPos, -40);
+            worldMatrix = m4.xRotate(worldMatrix, degToRad(45));
+            worldMatrix = m4.yRotate(worldMatrix, degToRad(45));
+            worldMatrix = m4.scale(worldMatrix, size, height, size);
+
+            drawObject(pickingProgramInfo, grattacieloBufferInfo, {
+                u_world: worldMatrix,
+                u_id: getId(2 * board.length + height),
+                u_viewProjection: selectorViewProjectionMatrix,
+            });
+        }
+
         // the bin
         {
-            const xPos = xOffset + spacing;
+            const xPos = xOffset + spacing * (n) + 2 * radius * (n - 1);
             const yPos = yOffset + binHeight / binSize;
             let worldMatrix = m4.identity();
             worldMatrix = m4.translate(worldMatrix, xPos, yPos, -40);
@@ -583,26 +648,6 @@ function main() {
                 u_viewProjection: selectorViewProjectionMatrix,
             })
         }
-
-        // the skyscrapers
-        for (let i = 1; i < n; i++) {
-            const height = i;
-            const xPos = xOffset + spacing * (i + 1) + 2 * radius * i;
-            const yPos = yOffset + (height / size);
-
-            let worldMatrix = m4.identity();
-            worldMatrix = m4.translate(worldMatrix, xPos, yPos, -40);
-            worldMatrix = m4.xRotate(worldMatrix, degToRad(45));
-            worldMatrix = m4.yRotate(worldMatrix, degToRad(45));
-            worldMatrix = m4.scale(worldMatrix, size, height, size);
-
-            drawObject(pickingProgramInfo, grattacieloBufferInfo, {
-                u_world: worldMatrix,
-                u_id: getId(2 * scacchiera.length + height),
-                u_viewProjection: selectorViewProjectionMatrix,
-            });
-        }
-
 
         // ------ Read the 1 pixel
 
@@ -647,6 +692,36 @@ function main() {
 
         drawScene(minimapProjectionMatrix, minimapViewMatrix, 90, true)
 
+        function drawDirectionSquare(worldMatrix, dir) {
+            worldMatrix = m4.yRotate(worldMatrix, degToRad(90));
+
+            drawObject(texturedProgramInfo, numbersBufferInfos[dir], {
+                u_matrix: computeWorldViewProjection(minimapProjectionMatrix, minimapViewMatrix, worldMatrix), u_texture: numberTexture,
+                u_worldInverseTranspose: m4.transpose(m4.inverse(worldMatrix)),
+                u_reverseLightDirection: m4.normalize([0, light.y, 0])
+            });
+        }
+
+        gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+        var distance = getPosFromIndex(settings.boardSize + 1) + 1;
+        var worldMatrix = m4.translate(m4.identity(), distance, 0, 0);
+        drawDirectionSquare(worldMatrix, "E");
+        var worldMatrix = m4.translate(m4.identity(), -distance, 0, 0);
+        drawDirectionSquare(worldMatrix, "W");
+        var worldMatrix = m4.translate(m4.identity(), 0, 0, distance);
+        drawDirectionSquare(worldMatrix, "S");
+        var worldMatrix = m4.translate(m4.identity(), 0, 0, -distance);
+        drawDirectionSquare(worldMatrix, "N");
+
+        var point = followSquarePath(0, 0, distance - .5, camera.angleX);
+        var worldMatrix = m4.translate(m4.identity(), point.x, 1, point.y);
+        worldMatrix = m4.yRotate(worldMatrix, degToRad(180 - camera.angleX));
+        worldMatrix = m4.scale(worldMatrix, 1.5, 1, 1.5);
+        drawDirectionSquare(worldMatrix, "V");
+
+        gl.disable(gl.BLEND);
+
         // ------- Draw selector -------
 
         gl.viewport(selectorX, selectorY, selectorWidth, selectorHeight);
@@ -656,37 +731,10 @@ function main() {
 
         gl.disable(gl.CULL_FACE);
 
-        // the bin
-        {
-            const xPos = xOffset + spacing;
-            const yPos = yOffset + binHeight / binSize;
-            let worldMatrix = m4.identity();
-            worldMatrix = m4.translate(worldMatrix, xPos, yPos, -40);
-            worldMatrix = m4.xRotate(worldMatrix, degToRad(15));
-            worldMatrix = m4.yRotate(worldMatrix, degToRad(45));
-            worldMatrix = m4.scale(worldMatrix, binSize, binSize, binSize);
-            let Ka = .6, Kd = .8;
-            if (extraLookedAt === BIN) {
-                Ka += .4;
-                Kd += .2;
-            }
-            let binColor = [0.8, 0.1, 0.1];
-            drawObject(solidColorProgramInfo, binBufferInfo, {
-                projection: m4.multiply(selectorProjectionMatrix, selectorViewMatrix),
-                modelview: worldMatrix,
-                normalMat: m4.transpose(m4.inverse(worldMatrix)),
-                mode: light.mode, Ka: Ka, Kd: Kd, Ks: 0,
-                shininessVal: light.shininessVal,
-                ambientColor: binColor, diffuseColor: binColor,
-                specularColor: [1, 1, 1],
-                lightPos: [xPos - spacing / 2, yPos, 0],
-            })
-        }
-
         // the skyscrapers
         for (let i = 1; i < n; i++) {
             const height = i;
-            const xPos = xOffset + spacing * (i + 1) + 2 * radius * i;
+            const xPos = xOffset + spacing * (i) + 2 * radius * (i - 1);
             const yPos = yOffset + (height / size);
 
             let worldMatrix = m4.identity();
@@ -696,13 +744,40 @@ function main() {
             worldMatrix = m4.scale(worldMatrix, size, height, size);
 
             let Ka = .6, Kd = .8;
-            if (scacchiera.filter(s => s.skyscraper === height).length >= settings.dimScacchiera) {
+            if (board.filter(s => s.skyscraper === height).length >= settings.boardSize) {
                 Ka = .2;
                 Kd = .4;
             }
-            if (height === id - 2 * scacchiera.length && !movingView) {
+            if (height === id - 2 * board.length && !movingView) {
                 Ka += .4;
                 Kd += .2;
+            }
+
+            // the bin
+            {
+                const xPos = xOffset + spacing * (n) + 2 * radius * (n - 1);
+                const yPos = yOffset + binHeight / binSize;
+                let worldMatrix = m4.identity();
+                worldMatrix = m4.translate(worldMatrix, xPos, yPos, -40);
+                worldMatrix = m4.xRotate(worldMatrix, degToRad(15));
+                worldMatrix = m4.yRotate(worldMatrix, degToRad(45));
+                worldMatrix = m4.scale(worldMatrix, binSize, binSize, binSize);
+                let Ka = .6, Kd = .8;
+                if (extraLookedAt === BIN) {
+                    Ka += .4;
+                    Kd += .2;
+                }
+                let binColor = [0.8, 0.1, 0.1];
+                drawObject(solidColorProgramInfo, binBufferInfo, {
+                    projection: m4.multiply(selectorProjectionMatrix, selectorViewMatrix),
+                    modelview: worldMatrix,
+                    normalMat: m4.transpose(m4.inverse(worldMatrix)),
+                    mode: light.mode, Ka: Ka, Kd: Kd, Ks: 0,
+                    shininessVal: light.shininessVal,
+                    ambientColor: binColor, diffuseColor: binColor,
+                    specularColor: [1, 1, 1],
+                    lightPos: [xPos - spacing / 2, yPos, 0],
+                })
             }
 
             drawObject(solidColorProgramInfo, grattacieloBufferInfo, {
@@ -730,20 +805,26 @@ function main() {
         angleXNode.nodeValue = camera.angleX.toFixed(1);
         angleYNode.nodeValue = camera.angleY.toFixed(1);
         idNode.nodeValue = `${id} / click ${clicking} / hold ${holding}`;
-        extraNode.nodeValue = ``;
+        extraNode.nodeValue = `${point.x}, ${point.y}`;
 
         requestAnimationFrame(render);
     }
 
-
     function lookingAt(id) {
+        function lookingAtCamera(dir) {
+            extraLookedAt = dir;
+            if (clicking) {
+                setSnap(dir);
+            }
+        }
+
         // restore
         if (oldPickId >= 0) {
             /**@type Square*/let square;
-            if (oldPickId <= scacchiera.length) {
-                square = scacchiera.filter(s => s.id == oldPickId)[0]
-            } else if (oldPickId > scacchiera.length) {
-                square = scacchiera.filter(s => s.id + scacchiera.length == oldPickId)[0]
+            if (oldPickId <= board.length) {
+                square = board.filter(s => s.id == oldPickId)[0]
+            } else if (oldPickId > board.length) {
+                square = board.filter(s => s.id + board.length == oldPickId)[0]
             }
             if (square) {
                 square.deselect();
@@ -754,18 +835,18 @@ function main() {
         }
 
         // object under mouse
-        if (id > 0 && !movingView) {
+        if (id > 0 && !movingView && playingGame) {
             oldPickId = id;
             /**@type Square*/
             let square;
-            if (id <= scacchiera.length) { // looking at a square
-                square = scacchiera.filter(s => s.id == id)[0]
-            } else if (id > scacchiera.length && id <= 2 * scacchiera.length) { // looking at a skyscraper
-                square = scacchiera.filter(s => s.id + scacchiera.length == id)[0]
-            } else if (id > 2 * scacchiera.length && id <= selectorOffset) {
+            if (id <= board.length) { // looking at a square
+                square = board.filter(s => s.id == id)[0]
+            } else if (id > board.length && id <= 2 * board.length) { // looking at a skyscraper
+                square = board.filter(s => s.id + board.length == id)[0]
+            } else if (id > 2 * board.length && id <= selectorOffset) {
                 if (selectedSkyscraper === 0 && clicking && !holding) {
                     holding = true;
-                    selectedSkyscraper = id - 2 * scacchiera.length;
+                    selectedSkyscraper = id - 2 * board.length;
                 }
             } else if (id > selectorOffset) {
                 if (id === binID) {
@@ -778,6 +859,18 @@ function main() {
                         selectedSquare = false;
                         holding = false;
                     }
+                }
+                if (id === cameraNorthID) {
+                    lookingAtCamera(CAMERA_N);
+                }
+                if (id === cameraEastID) {
+                    lookingAtCamera(CAMERA_E);
+                }
+                if (id === cameraSouthID) {
+                    lookingAtCamera(CAMERA_S);
+                }
+                if (id === cameraWestID) {
+                    lookingAtCamera(CAMERA_W);
                 }
             }
             if (usingTouch && !clicking && !holding) {
@@ -820,6 +913,7 @@ function main() {
                     selectedSkyscraper = 0;
                     selectedSquare = null;
                     holding = false;
+                    checkCorrect(settings.boardSize, board, numbersAround);
                 }
             }
         } else {
@@ -834,12 +928,17 @@ function main() {
                     holding = false;
                 }
             }
-            if (clicking && !holding) {
+            if (clicking && !holding && insideRegion(mouseX, mouseY, gameareaX, gameareaY, gameareaWidth, gameareaHeight)) {
                 movingView = true;
             }
             extraLookedAt = 0;
         }
     }
+
+    function insideRegion(x, y, startX, startY, endX, endY) {
+        return (x >= startX && x <= endX && y >= startY && y <= endY);
+    }
+
 
     function correctAngles() {
         camera.orto = false;
@@ -1009,6 +1108,24 @@ function main() {
         camera.angleY = 90;
         camera.orto = true;
     }
+    function setSnap(dir) {
+        switch (dir) {
+            case CAMERA_E:
+                camera.angleX = 0;
+                break;
+            case CAMERA_S:
+                camera.angleX = 90;
+                break;
+            case CAMERA_W:
+                camera.angleX = 180;
+                break;
+            case CAMERA_N:
+                camera.angleX = 270;
+                break;
+        }
+        camera.orto = true;
+        camera.angleY = 90;
+    }
 
     // Create text nodes to save some time for the browser.
     var angleXNode = document.createTextNode("");
@@ -1022,7 +1139,28 @@ function main() {
     document.querySelector("#info-id").appendChild(idNode);
     document.querySelector("#info-extra").appendChild(extraNode);
 
+    playingGame = true;
     requestAnimationFrame(render);
+}
+
+function main() {
+    let selectDiv = $('#level-selector');
+    let select = $('#levels');
+    let startButton = $("#btnStartgame");
+    startButton.on("click", (e) => {
+        selectDiv.hide();
+        startGame(levels[select.val()]);
+    })
+}
+
+class Number {
+    constructor(x, z, n) {
+        this.x = x;
+        this.z = z;
+        this.n = n;
+        this.duplicates = false;
+        this.correct = false;
+    }
 }
 
 function showMessage(errorText) {
@@ -1051,6 +1189,15 @@ function createSquareBufferInfo(gl) {
     });
 }
 
+function createCharacterSquareBufferInfo(gl, char = 0) {
+    return webglUtils.createBufferInfoFromArrays(gl, {
+        position: { numComponents: 3, data: new Float32Array(square_vertices) },
+        texcoord: { numComponents: 2, data: new Float32Array(getTextureCoordinatesForChar(char)) },
+        normal: { numComponents: 3, data: new Float32Array(square_normals) },
+        indices: { numComponents: 3, data: new Uint16Array(square_indices) },
+    });
+}
+
 function createCubeBufferInfo(gl) {
     const attribs = {
         position: { numComponents: 3, data: new Float32Array(cube_vertices) },
@@ -1069,6 +1216,107 @@ function createBufferFromMesh(gl, mesh) {
         normal: { numComponents: 3, data: new Float32Array(mesh.normals) },
     });
 }
+
+function checkCorrect(size, board, /** @type Number[] */numbersAround) {
+    let won = board.filter(s => s.skyscraper > 0).length === board.length;
+
+    for (let i = 0; i < size; i++) {
+        let row = [];
+        let col = [];
+        let topN = numbersAround[4 * i + 0];
+        let rightN = numbersAround[4 * i + 1];
+        let bottomN = numbersAround[4 * i + 2];
+        let leftN = numbersAround[4 * i + 3];
+        for (let j = 0; j < size; j++) {
+            let rowPiece = board[i * size + j].skyscraper;
+            let colPiece = board[i + j * size].skyscraper;
+            if (row.includes(rowPiece)) {
+                won = false;
+                leftN.duplicates = true;
+                rightN.duplicates = true;
+            } else {
+                rightN.duplicates = false || rightN.duplicates;
+                leftN.duplicates = false || leftN.duplicates;
+            }
+            if (col.includes(colPiece)) {
+                won = false;
+                topN.duplicates = true;
+                bottomN.duplicates = true;
+            } else {
+                topN.duplicates = true || topN.duplicates;
+                bottomN.duplicates = true || bottomN.duplicates;
+            }
+            row.push(rowPiece);
+            col.push(colPiece);
+        }
+
+        topN.correct = topN.n > 0 && countVisible(col) === topN.n;
+        rightN.correct = rightN.n > 0 && countVisible(row.toReversed()) === rightN.n;
+        bottomN.correct = bottomN.n > 0 && countVisible(col.toReversed()) === bottomN.n;
+        leftN.correct = leftN.n > 0 && countVisible(row) === leftN.n;
+    };
+    if (won) {
+        playingGame = false;
+        gameWon = true;
+        $('#message-area').show();
+    }
+}
+
+function countVisible(row) {
+    let notEmpty = row.filter(s => s > 0);
+    let visible = notEmpty.length > 0 ? 1 : 0; // check if there is at least one skyscraper
+    for (let i = 1; i < notEmpty.length; i++) {
+        if (notEmpty[i] > notEmpty[i - 1]) {
+            visible += 1;
+        }
+    }
+    return visible;
+}
+
+
+function followSquarePath(centerX, centerY, size, deg) {
+    var theta = degToRad(360 - deg);
+
+    while (theta < -Math.PI) {
+        theta += Math.PI * 2;
+    }
+    while (theta > Math.PI) {
+        theta -= Math.PI * 2;
+    }
+
+    var squareAtan = Math.atan2(2 * size, 2 * size);
+    var tanTheta = Math.tan(theta);
+    var region;
+    if ((theta > -squareAtan) && (theta <= squareAtan)) {
+        region = 1;
+    } else if ((theta > squareAtan) && (theta <= (Math.PI - squareAtan))) {
+        region = 2;
+    } else if ((theta > (Math.PI - squareAtan)) || (theta <= -(Math.PI - squareAtan))) {
+        region = 3;
+    } else {
+        region = 4;
+    }
+
+    var point = { x: centerX, y: centerY };
+    var xFactor = 1, yFactor = 1;
+
+    switch (region) {
+        case 1: yFactor = -1; break;
+        case 2: yFactor = -1; break;
+        case 3: xFactor = -1; break;
+        case 4: xFactor = -1; break;
+    }
+
+    if ((region === 1) || (region === 3)) {
+        point.x += xFactor * (size);
+        point.y += yFactor * (size) * tanTheta;
+    } else {
+        point.x += xFactor * (2 * size / (2. * tanTheta));
+        point.y += yFactor * (size);
+    }
+
+    return point;
+};
 
 function getId(id) {
     return [

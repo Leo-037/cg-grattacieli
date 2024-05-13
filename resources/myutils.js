@@ -1,4 +1,4 @@
-export function loadTexture(gl, url) {
+export function loadTexture(gl, url, generateMipmaps=true) {
     const texture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, texture);
 
@@ -36,13 +36,14 @@ export function loadTexture(gl, url) {
         );
 
         // Only if it's a power of 2 generate mips.
-        if (isPowerOf2(image.width) && isPowerOf2(image.height)) {
+        if (isPowerOf2(image.width) && isPowerOf2(image.height) && generateMipmaps) {
             gl.generateMipmap(gl.TEXTURE_2D);
         } else {
             // Turn off mips and set wrapping to clamp to edge
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
         }
     };
     image.src = url;

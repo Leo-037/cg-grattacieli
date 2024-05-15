@@ -141,3 +141,24 @@ export const square_textcoords = [
     // Left
     0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
 ]
+
+
+export const plane_vertices = [
+    // Top face
+    -1.0, 0.01, -1.0,
+    -1.0, 0.01, 1.0,
+    1.0, 0.01, 1.0,
+    1.0, 0.01, -1.0,
+];
+export const plane_indices = [
+    0, 1, 2,
+    0, 2, 3,
+];
+export const plane_normals = [
+    // Top
+    0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0,
+];
+
+export const plane_textcoords = [
+    0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0,
+]

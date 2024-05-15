@@ -1,24 +1,11 @@
 "use strict"
 
-import { cube_colors, cube_indices, cube_normals, cube_vertices, square_indices, square_normals, square_textcoords, square_vertices } from "./data/geometry.js";
-import { levels } from "./levels.js";
+import {
+    cube_colors, cube_indices, cube_normals, cube_vertices, square_indices, square_normals, square_textcoords, square_vertices, plane_vertices, plane_normals, plane_indices,
+} from "./data/geometry.js";
 import { LoadMesh, degToRad, getRandomInt, loadTexture } from "./resources/myutils.js"
 
-var skyscraperMeshData = new Array();
-var binMeshData = new Array();
-
-const BIN = 1;
-const CAMERA_N = 2;
-const CAMERA_E = 3;
-const CAMERA_S = 4;
-const CAMERA_W = 5;
-let binID = -1;
-let cameraNorthID = -1;
-let cameraEastID = -1;
-let cameraSouthID = -1;
-let cameraWestID = -1;
-
-const numberTextureInfo = {
+const textureAtlas = {
     size: 512,
     textureWidth: 512 * 5,
     textureHeight: 512 * 5,
@@ -32,12 +19,14 @@ const numberTextureInfo = {
         7: { x: 1, y: 1 },
         8: { x: 2, y: 1 },
         9: { x: 3, y: 1 },
-        0: { x: 4, y: 1 },
         "N": { x: 0, y: 2 },
         "E": { x: 1, y: 2 },
         "S": { x: 2, y: 2 },
         "W": { x: 3, y: 2 },
         "V": { x: 4, y: 2 },
+        "empty": { x: 0, y: 3 },
+        "correct": { x: 1, y: 3 },
+        "wrong": { x: 2, y: 3 },
     }
 }
 
@@ -53,58 +42,34 @@ const colors = {
     9: m4.normalize([0, 0, 0]),
 }
 
-function toFixedFloat(n, f) {
-    return Math.floor((n * 10 ** f).toFixed(f)) / 10 ** f
-}
-
-function getTextureCoordinatesForChar(c) {
-    // fill the texture with 1s
-    var texcoords = []
-    for (let i = 0; i < 48; i++) {
-        texcoords.push(1)
-    }
-    var maxX = numberTextureInfo.textureWidth;
-    var maxY = numberTextureInfo.textureHeight;
-
-    const offset = 16; // edit the top face
-
-    var char = numberTextureInfo.pos[c];
-    var u1 = toFixedFloat(char.x * numberTextureInfo.size / maxX, 2);
-    var v1 = toFixedFloat(1 - ((char.y + 1) * numberTextureInfo.size) / maxY, 2);
-    var u2 = toFixedFloat(((char.x + 1) * numberTextureInfo.size) / maxX, 2);
-    var v2 = toFixedFloat(1 - char.y * numberTextureInfo.size / maxY, 2);
-
-    // Adjust texture coordinates to avoid bleeding
-    var pixelOffset = 1; // Adjust this value as needed
-    var u1Safe = u1 + pixelOffset / maxX;
-    var v1Safe = v1 + pixelOffset / maxY;
-    var u2Safe = u2 - pixelOffset / maxX;
-    var v2Safe = v2 - pixelOffset / maxY;
-
-    texcoords[offset + 0] = u1Safe;
-    texcoords[offset + 1] = v1Safe;
-
-    texcoords[offset + 2] = u2Safe;
-    texcoords[offset + 3] = v1Safe;
-
-    texcoords[offset + 4] = u2Safe;
-    texcoords[offset + 5] = v2Safe;
-
-    texcoords[offset + 6] = u1Safe;
-    texcoords[offset + 7] = v2Safe;
-
-    return texcoords;
-}
+const gameareaColor = [0.8, 0.8, 1, 1];
+const minimapColor = [1, 0.8, 0.3, 1];
+const selectorColor = [0.2, 0.2, 0.2, 1];
+const extraColor = [0.3, 0.7, 0.5, 1];
 
 let playingGame = false;
-let gameWon = false;
 
-function startGame(settings) {
+
+export function play(settings, gameEndedCallback) {
+    var skyscraperMeshData = new Array();
+    var binMeshData = new Array();
+
+    const BIN = 1;
+    const CAMERA_N = 2;
+    const CAMERA_E = 3;
+    const CAMERA_S = 4;
+    const CAMERA_W = 5;
+    let binID = -1;
+    let cameraNorthID = -1;
+    let cameraEastID = -1;
+    let cameraSouthID = -1;
+    let cameraWestID = -1;
+
     /** @type {HTMLCanvasElement} */
     const canvas = document.querySelector('#canvas');
     const gl = canvas.getContext('webgl', {
         // premultipliedAlpha: false,
-        antialias: false,
+        // antialias: false,
     });
     if (!gl) {
         return;
@@ -155,16 +120,22 @@ function startGame(settings) {
     const binBufferInfo = createBufferFromMesh(gl, binMesh);
     const cubeBufferInfo = createCubeBufferInfo(gl);
 
-    const numbersBufferInfos = {}
-    for (let i = 0; i <= settings.boardSize; i++) {
-        numbersBufferInfos[i] = createCharacterSquareBufferInfo(gl, i);
+    const charactersBufferInfos = {}
+    for (let i = 1; i <= settings.boardSize; i++) {
+        charactersBufferInfos[i] = createCharacterBufferInfo(gl, i);
     }
 
-    numbersBufferInfos["N"] = createCharacterSquareBufferInfo(gl, "N");
-    numbersBufferInfos["E"] = createCharacterSquareBufferInfo(gl, "E");
-    numbersBufferInfos["S"] = createCharacterSquareBufferInfo(gl, "S");
-    numbersBufferInfos["W"] = createCharacterSquareBufferInfo(gl, "W");
-    numbersBufferInfos["V"] = createCharacterSquareBufferInfo(gl, "V");
+    charactersBufferInfos["N"] = createCharacterBufferInfo(gl, "N");
+    charactersBufferInfos["E"] = createCharacterBufferInfo(gl, "E");
+    charactersBufferInfos["S"] = createCharacterBufferInfo(gl, "S");
+    charactersBufferInfos["W"] = createCharacterBufferInfo(gl, "W");
+    charactersBufferInfos["V"] = createCharacterBufferInfo(gl, "V");
+
+    const tileBufferInfos = {
+        empty: createTileBufferInfo(gl, "empty"),
+        correct: createTileBufferInfo(gl, "correct"),
+        wrong: createTileBufferInfo(gl, "wrong"),
+    }
 
     const pickingProgramInfo = webglUtils.createProgramInfo(gl, ["pick-vertex-shader", "pick-fragment-shader"]);
     const texturedProgramInfo = webglUtils.createProgramInfo(gl, ['simple-texture-vertex-shader-3d', 'simple-texture-fragment-shader-3d']);
@@ -236,7 +207,7 @@ function startGame(settings) {
         numbersAround.push(new Number(-p2, p1, inGame ? settings.disposition[i + 3 * settings.boardSize] : getRandomInt(1, settings.boardSize)));
     }
 
-    if (true || !inGame) {
+    if (!inGame) {
         // generate some skyscrapers in random spots
         for (let i = 0; i < settings.boardSize * 2; i++) {
             let square = board[Math.floor(Math.random() * board.length)];;
@@ -255,7 +226,7 @@ function startGame(settings) {
 
 
     const squareTexture = loadTexture(gl, "./resources/images/square.png")
-    const numberTexture = loadTexture(gl, "./resources/images/numbers/allNumbers.png");
+    const numbersTexture = loadTexture(gl, "./resources/images/numbers/allNumbers.png");
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
 
     // -------- TEXTURE FOR PICKING --------
@@ -314,7 +285,7 @@ function startGame(settings) {
 
     function drawScene(projectionMatrix, viewMatrix, tileRotation, minimap = false) {
         board.forEach((/** @type Square */ square) => {
-            let worldMatrix = m4.translate(m4.identity(), square.x, 0, square.z);
+            var worldMatrix = m4.translate(m4.identity(), square.x, 0, square.z);
             worldMatrix = m4.multiply(worldMatrix, square.transform);
 
             drawObject(texturedProgramInfo, squareBufferInfo, {
@@ -324,8 +295,8 @@ function startGame(settings) {
                 u_reverseLightDirection: m4.normalize([0, light.y, 0])
             });
 
+            let skyscraper, Ka, Kd;
             if (squareLookedAt === square.id) {
-                let skyscraper;
                 if (selectedSquare) {
                     skyscraper = selectedSquare.skyscraper;
                 } else if (selectedSkyscraper > 0) {
@@ -333,40 +304,41 @@ function startGame(settings) {
                 } else {
                     skyscraper = square.skyscraper;
                 }
-                if (skyscraper > 0) {
-                    let worldMatrix = m4.translate(m4.identity(), square.x, skyscraper, square.z);
-                    worldMatrix = m4.scale(worldMatrix, .9, skyscraper, .9);
-                    const cameraPos = getCameraPos();
-                    drawObject(solidColorProgramInfo, grattacieloBufferInfo, {
-                        projection: m4.multiply(projectionMatrix, viewMatrix),
-                        modelview: worldMatrix,
-                        normalMat: m4.transpose(m4.inverse(worldMatrix)),
-                        mode: light.mode, Ka: 1.0, Kd: 1.0, Ks: light.Ks,
-                        shininessVal: light.shininessVal,
-                        ambientColor: colors[skyscraper],
-                        diffuseColor: colors[skyscraper],
-                        specularColor: [1, 1, 1],
-                        lightPos: minimap ? [square.x, 20, square.z] : [cameraPos[0], 8, cameraPos[2]],
-                    });
-                }
+                Ka = 1.0; Kd = 1.0;
             } else if (square.skyscraper > 0 && !(selectedSquare && selectedSquare.id === square.id)) {
-                let worldMatrix = m4.translate(m4.identity(), square.x, square.skyscraper, square.z);
-                worldMatrix = m4.scale(worldMatrix, .9, square.skyscraper, .9);
+                skyscraper = square.skyscraper;
+                Ka = light.Ka; Kd = light.Kd;
+            }
+            if (skyscraper > 0) {
+                var worldMatrix = m4.translate(m4.identity(), square.x, skyscraper, square.z);
+                worldMatrix = m4.scale(worldMatrix, .9, skyscraper, .9);
                 const cameraPos = getCameraPos();
                 drawObject(solidColorProgramInfo, grattacieloBufferInfo, {
                     projection: m4.multiply(projectionMatrix, viewMatrix),
                     modelview: worldMatrix,
                     normalMat: m4.transpose(m4.inverse(worldMatrix)),
                     mode: light.mode,
-                    Ka: light.Ka,     // ambient
-                    Kd: light.Kd,     // diffuse
+                    Ka: Ka,     // ambient
+                    Kd: Kd,     // diffuse
                     Ks: light.Ks,     // specular
                     shininessVal: light.shininessVal,
-                    ambientColor: colors[square.skyscraper],
-                    diffuseColor: colors[square.skyscraper],
+                    ambientColor: colors[skyscraper],
+                    diffuseColor: colors[skyscraper],
                     specularColor: [1, 1, 1],
                     lightPos: minimap ? [square.x, 20, square.z] : [cameraPos[0], 8, cameraPos[2]],
                 });
+                if (minimap) {
+                    gl.enable(gl.BLEND);
+                    var worldMatrix = m4.translate(m4.identity(), square.x, settings.boardSize * 2, square.z);
+                    worldMatrix = m4.yRotate(worldMatrix, degToRad(90));
+                    drawObject(texturedProgramInfo, charactersBufferInfos[skyscraper], {
+                        u_matrix: computeWorldViewProjection(projectionMatrix, viewMatrix, worldMatrix),
+                        u_texture: numbersTexture,
+                        u_worldInverseTranspose: m4.transpose(m4.inverse(worldMatrix)),
+                        u_reverseLightDirection: m4.normalize([0, light.y, 0])
+                    });
+                    gl.disable(gl.BLEND);
+                }
             }
         });
 
@@ -378,12 +350,31 @@ function startGame(settings) {
                 worldMatrix = m4.translate(worldMatrix, -1, 0, 0)
             }
 
-            drawObject(texturedProgramInfo, numbersBufferInfos[num.n], {
+            var background = tileBufferInfos.empty;
+
+            if (num.correct && !num.duplicates) {
+                background = tileBufferInfos.correct;
+            }
+            if (num.duplicates) {
+                background = tileBufferInfos.wrong;
+            }
+
+            drawObject(texturedProgramInfo, background, {
                 u_matrix: computeWorldViewProjection(projectionMatrix, viewMatrix, worldMatrix),
-                u_texture: numberTexture,
+                u_texture: numbersTexture,
                 u_worldInverseTranspose: m4.transpose(m4.inverse(worldMatrix)),
                 u_reverseLightDirection: m4.normalize([0, light.y, 0])
             });
+            if (num.n > 0) {
+                gl.enable(gl.BLEND);
+                drawObject(texturedProgramInfo, charactersBufferInfos[num.n], {
+                    u_matrix: computeWorldViewProjection(projectionMatrix, viewMatrix, worldMatrix),
+                    u_texture: numbersTexture,
+                    u_worldInverseTranspose: m4.transpose(m4.inverse(worldMatrix)),
+                    u_reverseLightDirection: m4.normalize([0, light.y, 0])
+                });
+                gl.disable(gl.BLEND);
+            }
         })
 
         function drawEmptySquare(worldMatrix) {
@@ -392,8 +383,8 @@ function startGame(settings) {
                 worldMatrix = m4.zRotate(worldMatrix, degToRad(90));
                 worldMatrix = m4.translate(worldMatrix, -1, 0, 0)
             }
-            drawObject(texturedProgramInfo, numbersBufferInfos[0], {
-                u_matrix: computeWorldViewProjection(projectionMatrix, viewMatrix, worldMatrix), u_texture: numberTexture,
+            drawObject(texturedProgramInfo, tileBufferInfos.empty, {
+                u_matrix: computeWorldViewProjection(projectionMatrix, viewMatrix, worldMatrix), u_texture: numbersTexture,
                 u_worldInverseTranspose: m4.transpose(m4.inverse(worldMatrix)),
                 u_reverseLightDirection: m4.normalize([0, light.y, 0])
             });
@@ -418,6 +409,8 @@ function startGame(settings) {
     let mouseY = -1;
     let oldPickId = -1;
 
+    let lastRotation = 0;
+
     let usingTouch = false;
     let clicking = false;
     let holding = false;
@@ -430,6 +423,7 @@ function startGame(settings) {
     let selectedSkyscraper = 0;
     let extraLookedAt = 0;
     let squarePickedFrom = null;
+
 
     function render() {
         if (webglUtils.resizeCanvasToDisplaySize(gl.canvas)) {
@@ -558,7 +552,7 @@ function startGame(settings) {
 
         function drawSquareForTexture(worldMatrix, id) {
             worldMatrix = m4.yRotate(worldMatrix, degToRad(0));
-            drawObject(pickingProgramInfo, numbersBufferInfos[0], {
+            drawObject(pickingProgramInfo, tileBufferInfos.empty, {
                 u_world: worldMatrix, u_id: getId(id),
                 u_viewProjection: minimapViewProjectionMatrix,
             });
@@ -641,7 +635,7 @@ function startGame(settings) {
             worldMatrix = m4.yRotate(worldMatrix, degToRad(45));
             worldMatrix = m4.scale(worldMatrix, binSize, binSize, binSize);
             binID = selectorOffset + 1;
-            // on the texture the bin is a cube to be more
+            // on the texture the bin is a cube to be easier to click
             drawObject(pickingProgramInfo, cubeBufferInfo, {
                 u_world: worldMatrix,
                 u_id: getId(binID),
@@ -662,24 +656,28 @@ function startGame(settings) {
         // ------------- Draw the objects to the canvas -------------
 
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.depthFunc(gl.LEQUAL);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
         // ------- Draw the game area ------- 
 
         gl.viewport(gameareaX, gameareaY, gameareaWidth, gameareaHeight);
         gl.scissor(gameareaX, gameareaY, gameareaWidth, gameareaHeight);
-        gl.clearColor(0.8, 0.8, 1, 1);
+        gl.clearColor(...gameareaColor);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-        let rotation = 0;
-        if (camera.angleX > 315 || camera.angleX < 45) {
+        let rotation = lastRotation;
+        const safeArea = 15; // the rotation will change only if the angle changes by a certain threshold
+        if (camera.angleX > 315 + safeArea || camera.angleX < 45 - safeArea) {
             rotation = 180;
-        } else if (camera.angleX >= 45 && camera.angleX < 135) {
+        } else if (camera.angleX >= 45 + safeArea && camera.angleX < 135 - safeArea) {
             rotation = 90;
-        } else if (camera.angleX >= 135 && camera.angleX < 225) {
+        } else if (camera.angleX >= 135 + safeArea && camera.angleX < 225 - safeArea) {
             rotation = 0;
-        } else if (camera.angleX >= 225 && camera.angleX < 315) {
-            rotation = 270
+        } else if (camera.angleX >= 225 + safeArea && camera.angleX < 315 - safeArea) {
+            rotation = 270;
         }
+        lastRotation = rotation;
 
         drawScene(projectionMatrix, viewMatrix, rotation)
 
@@ -687,7 +685,7 @@ function startGame(settings) {
 
         gl.viewport(minimapX, minimapY, minimapWidth, minimapHeight);
         gl.scissor(minimapX, minimapY, minimapWidth, minimapHeight);
-        gl.clearColor(1, 0.8, 0.3, 1);
+        gl.clearColor(...minimapColor);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
         drawScene(minimapProjectionMatrix, minimapViewMatrix, 90, true)
@@ -695,14 +693,14 @@ function startGame(settings) {
         function drawDirectionSquare(worldMatrix, dir) {
             worldMatrix = m4.yRotate(worldMatrix, degToRad(90));
 
-            drawObject(texturedProgramInfo, numbersBufferInfos[dir], {
-                u_matrix: computeWorldViewProjection(minimapProjectionMatrix, minimapViewMatrix, worldMatrix), u_texture: numberTexture,
+            drawObject(texturedProgramInfo, charactersBufferInfos[dir], {
+                u_matrix: computeWorldViewProjection(minimapProjectionMatrix, minimapViewMatrix, worldMatrix), u_texture: numbersTexture,
                 u_worldInverseTranspose: m4.transpose(m4.inverse(worldMatrix)),
                 u_reverseLightDirection: m4.normalize([0, light.y, 0])
             });
         }
 
-        gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        gl.enable(gl.BLEND);
 
         var distance = getPosFromIndex(settings.boardSize + 1) + 1;
         var worldMatrix = m4.translate(m4.identity(), distance, 0, 0);
@@ -726,7 +724,7 @@ function startGame(settings) {
 
         gl.viewport(selectorX, selectorY, selectorWidth, selectorHeight);
         gl.scissor(selectorX, selectorY, selectorWidth, selectorHeight);
-        gl.clearColor(0.2, 0.2, 0.2, 1);
+        gl.clearColor(...selectorColor);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
         gl.disable(gl.CULL_FACE);
@@ -796,7 +794,7 @@ function startGame(settings) {
 
         gl.viewport(extraX, extraY, extraWidth, extraHeight);
         gl.scissor(extraX, extraY, extraWidth, extraHeight);
-        gl.clearColor(0.3, 0.7, 0.5, 1);
+        gl.clearColor(...extraColor);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
         // ------------------------------------------------
@@ -860,16 +858,16 @@ function startGame(settings) {
                         holding = false;
                     }
                 }
-                if (id === cameraNorthID) {
+                if (id === cameraNorthID && !holding) {
                     lookingAtCamera(CAMERA_N);
                 }
-                if (id === cameraEastID) {
+                if (id === cameraEastID && !holding) {
                     lookingAtCamera(CAMERA_E);
                 }
-                if (id === cameraSouthID) {
+                if (id === cameraSouthID && !holding) {
                     lookingAtCamera(CAMERA_S);
                 }
-                if (id === cameraWestID) {
+                if (id === cameraWestID && !holding) {
                     lookingAtCamera(CAMERA_W);
                 }
             }
@@ -913,8 +911,12 @@ function startGame(settings) {
                     selectedSkyscraper = 0;
                     selectedSquare = null;
                     holding = false;
-                    checkCorrect(settings.boardSize, board, numbersAround);
                 }
+            }
+            let won = checkCorrect(settings.boardSize, board, numbersAround);
+            if (won) {
+                playingGame = false;
+                gameEndedCallback();
             }
         } else {
             if (!clicking) {
@@ -926,6 +928,8 @@ function startGame(settings) {
                     selectedSquare = null;
                     squarePickedFrom = null;
                     holding = false;
+                } else {
+                    selectedSkyscraper = 0;
                 }
             }
             if (clicking && !holding && insideRegion(mouseX, mouseY, gameareaX, gameareaY, gameareaWidth, gameareaHeight)) {
@@ -938,7 +942,6 @@ function startGame(settings) {
     function insideRegion(x, y, startX, startY, endX, endY) {
         return (x >= startX && x <= endX && y >= startY && y <= endY);
     }
-
 
     function correctAngles() {
         camera.orto = false;
@@ -1143,15 +1146,6 @@ function startGame(settings) {
     requestAnimationFrame(render);
 }
 
-function main() {
-    let selectDiv = $('#level-selector');
-    let select = $('#levels');
-    let startButton = $("#btnStartgame");
-    startButton.on("click", (e) => {
-        selectDiv.hide();
-        startGame(levels[select.val()]);
-    })
-}
 
 class Number {
     constructor(x, z, n) {
@@ -1161,60 +1155,6 @@ class Number {
         this.duplicates = false;
         this.correct = false;
     }
-}
-
-function showMessage(errorText) {
-    const errorBoxDiv = document.getElementById('error-box');
-    const errorSpan = document.createElement('p');
-    errorSpan.innerText = errorText;
-    errorBoxDiv.replaceChildren(errorSpan)
-}
-
-function computeWorldViewProjection(projectionMatrix, viewMatrix, worldMatrix) {
-    // The matrix that maps the 3D space as seen from the camera to the 2D projection 
-    let viewProjectionMatrix = m4.multiply(projectionMatrix, viewMatrix);
-
-    // Apply the "world" changes to the 3D space
-    var worldViewProjectionMatrix = m4.multiply(viewProjectionMatrix, worldMatrix);
-
-    return worldViewProjectionMatrix;
-}
-
-function createSquareBufferInfo(gl) {
-    return webglUtils.createBufferInfoFromArrays(gl, {
-        position: { numComponents: 3, data: new Float32Array(square_vertices) },
-        texcoord: { numComponents: 2, data: new Uint16Array(square_textcoords) },
-        normal: { numComponents: 3, data: new Float32Array(square_normals) },
-        indices: { numComponents: 3, data: new Uint16Array(square_indices) },
-    });
-}
-
-function createCharacterSquareBufferInfo(gl, char = 0) {
-    return webglUtils.createBufferInfoFromArrays(gl, {
-        position: { numComponents: 3, data: new Float32Array(square_vertices) },
-        texcoord: { numComponents: 2, data: new Float32Array(getTextureCoordinatesForChar(char)) },
-        normal: { numComponents: 3, data: new Float32Array(square_normals) },
-        indices: { numComponents: 3, data: new Uint16Array(square_indices) },
-    });
-}
-
-function createCubeBufferInfo(gl) {
-    const attribs = {
-        position: { numComponents: 3, data: new Float32Array(cube_vertices) },
-        color: { numComponents: 3, data: new Float32Array(cube_colors) },
-        texcoord: { numComponents: 2, data: new Float32Array(square_textcoords) },
-        normal: { numComponents: 3, data: new Float32Array(cube_normals) },
-        indices: { numComponents: 3, data: new Uint16Array(cube_indices) },
-    }
-    return webglUtils.createBufferInfoFromArrays(gl, attribs);
-}
-
-function createBufferFromMesh(gl, mesh) {
-    return webglUtils.createBufferInfoFromArrays(gl, {
-        position: { numComponents: 3, data: new Float32Array(mesh.positions) },
-        texcoord: { numComponents: 2, data: new Float32Array(mesh.texcoords) },
-        normal: { numComponents: 3, data: new Float32Array(mesh.normals) },
-    });
 }
 
 function checkCorrect(size, board, /** @type Number[] */numbersAround) {
@@ -1227,24 +1167,22 @@ function checkCorrect(size, board, /** @type Number[] */numbersAround) {
         let rightN = numbersAround[4 * i + 1];
         let bottomN = numbersAround[4 * i + 2];
         let leftN = numbersAround[4 * i + 3];
+        topN.duplicates = false;
+        rightN.duplicates = false;
+        bottomN.duplicates = false;
+        leftN.duplicates = false;
         for (let j = 0; j < size; j++) {
             let rowPiece = board[i * size + j].skyscraper;
             let colPiece = board[i + j * size].skyscraper;
-            if (row.includes(rowPiece)) {
+            if (row.includes(rowPiece) && rowPiece != 0) {
                 won = false;
                 leftN.duplicates = true;
                 rightN.duplicates = true;
-            } else {
-                rightN.duplicates = false || rightN.duplicates;
-                leftN.duplicates = false || leftN.duplicates;
             }
-            if (col.includes(colPiece)) {
+            if (col.includes(colPiece) && colPiece != 0) {
                 won = false;
                 topN.duplicates = true;
                 bottomN.duplicates = true;
-            } else {
-                topN.duplicates = true || topN.duplicates;
-                bottomN.duplicates = true || bottomN.duplicates;
             }
             row.push(rowPiece);
             col.push(colPiece);
@@ -1255,18 +1193,16 @@ function checkCorrect(size, board, /** @type Number[] */numbersAround) {
         bottomN.correct = bottomN.n > 0 && countVisible(col.toReversed()) === bottomN.n;
         leftN.correct = leftN.n > 0 && countVisible(row) === leftN.n;
     };
-    if (won) {
-        playingGame = false;
-        gameWon = true;
-        $('#message-area').show();
-    }
+    return won;
 }
 
 function countVisible(row) {
     let notEmpty = row.filter(s => s > 0);
     let visible = notEmpty.length > 0 ? 1 : 0; // check if there is at least one skyscraper
+    var tallest = notEmpty[0];
     for (let i = 1; i < notEmpty.length; i++) {
-        if (notEmpty[i] > notEmpty[i - 1]) {
+        if (notEmpty[i] > notEmpty[i - 1] && notEmpty[i] > tallest) {
+            tallest = notEmpty[i];
             visible += 1;
         }
     }
@@ -1327,5 +1263,117 @@ function getId(id) {
     ]
 }
 
+function showMessage(errorText) {
+    const errorBoxDiv = document.getElementById('error-box');
+    const errorSpan = document.createElement('p');
+    errorSpan.innerText = errorText;
+    errorBoxDiv.replaceChildren(errorSpan)
+}
 
-main();
+function computeWorldViewProjection(projectionMatrix, viewMatrix, worldMatrix) {
+    // The matrix that maps the 3D space as seen from the camera to the 2D projection 
+    let viewProjectionMatrix = m4.multiply(projectionMatrix, viewMatrix);
+
+    // Apply the "world" changes to the 3D space
+    var worldViewProjectionMatrix = m4.multiply(viewProjectionMatrix, worldMatrix);
+
+    return worldViewProjectionMatrix;
+}
+
+function toFixedFloat(n, f) {
+    return Math.floor((n * 10 ** f).toFixed(f)) / 10 ** f
+}
+
+function getTextureCoordinatesFromAtlas(c, pixelOffset = 1) {
+    let char = textureAtlas.pos[c];
+
+    let maxX = textureAtlas.textureWidth;
+    let maxY = textureAtlas.textureHeight;
+    let u1 = char.x * textureAtlas.size / maxX;
+    let v1 = 1 - ((char.y + 1) * textureAtlas.size) / maxY;
+    let u2 = ((char.x + 1) * textureAtlas.size) / maxX;
+    let v2 = 1 - char.y * textureAtlas.size / maxY;
+
+    // Adjust coordinates to avoid bleeding
+    let u1Safe = toFixedFloat(u1 + pixelOffset / maxX, 4);
+    let v1Safe = toFixedFloat(v1 + pixelOffset / maxY, 4);
+    let u2Safe = toFixedFloat(u2 - pixelOffset / maxX, 4);
+    let v2Safe = toFixedFloat(v2 - pixelOffset / maxY, 4);
+
+    return { u1: u1Safe, v1: v1Safe, u2: u2Safe, v2: v2Safe }
+}
+
+function makeTextureForFace(c, texcoords = [], offset = 0) {
+    const face = getTextureCoordinatesFromAtlas(c);
+
+    texcoords[offset + 0] = face.u1;
+    texcoords[offset + 1] = face.v1;
+
+    texcoords[offset + 2] = face.u2;
+    texcoords[offset + 3] = face.v1;
+
+    texcoords[offset + 4] = face.u2;
+    texcoords[offset + 5] = face.v2;
+
+    texcoords[offset + 6] = face.u1;
+    texcoords[offset + 7] = face.v2;
+
+    return texcoords;
+}
+
+function makeTextureForTile(c) {
+    // fill the texture with 1s
+    var texcoords = []
+    for (let i = 0; i < 6; i++) {
+        texcoords = makeTextureForFace(c, texcoords, i * 8)
+    }
+
+    return texcoords;
+}
+
+function createSquareBufferInfo(gl) {
+    return webglUtils.createBufferInfoFromArrays(gl, {
+        position: { numComponents: 3, data: new Float32Array(square_vertices) },
+        texcoord: { numComponents: 2, data: new Uint16Array(square_textcoords) },
+        normal: { numComponents: 3, data: new Float32Array(square_normals) },
+        indices: { numComponents: 3, data: new Uint16Array(square_indices) },
+    });
+}
+
+function createCharacterBufferInfo(gl, char) {
+    return webglUtils.createBufferInfoFromArrays(gl, {
+        position: { numComponents: 3, data: new Float32Array(plane_vertices) },
+        texcoord: { numComponents: 2, data: new Float32Array(makeTextureForFace(char)) },
+        normal: { numComponents: 3, data: new Float32Array(plane_normals) },
+        indices: { numComponents: 3, data: new Uint16Array(plane_indices) },
+    });
+}
+
+function createTileBufferInfo(gl, char) {
+    return webglUtils.createBufferInfoFromArrays(gl, {
+        position: { numComponents: 3, data: new Float32Array(square_vertices) },
+        texcoord: { numComponents: 2, data: new Float32Array(makeTextureForTile(char)) },
+        normal: { numComponents: 3, data: new Float32Array(square_normals) },
+        indices: { numComponents: 3, data: new Uint16Array(square_indices) },
+    });
+}
+
+
+function createCubeBufferInfo(gl) {
+    const attribs = {
+        position: { numComponents: 3, data: new Float32Array(cube_vertices) },
+        color: { numComponents: 3, data: new Float32Array(cube_colors) },
+        texcoord: { numComponents: 2, data: new Float32Array(square_textcoords) },
+        normal: { numComponents: 3, data: new Float32Array(cube_normals) },
+        indices: { numComponents: 3, data: new Uint16Array(cube_indices) },
+    }
+    return webglUtils.createBufferInfoFromArrays(gl, attribs);
+}
+
+function createBufferFromMesh(gl, mesh) {
+    return webglUtils.createBufferInfoFromArrays(gl, {
+        position: { numComponents: 3, data: new Float32Array(mesh.positions) },
+        texcoord: { numComponents: 2, data: new Float32Array(mesh.texcoords) },
+        normal: { numComponents: 3, data: new Float32Array(mesh.normals) },
+    });
+}

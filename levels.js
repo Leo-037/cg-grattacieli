@@ -1,8 +1,8 @@
 /*
-  ###, bottom left to right -> top left to right
-  ###, right top to bottom -> right top to bottom
-  ###, top left to right -> bottom left to right
-  ###, left top to bottom -> left top to bottom
+  ####, top left to right
+  ####, right top to bottom
+  ####, bottom left to right
+  ####, left top to bottom
 */
 
 export const levels = {

@@ -32,12 +32,13 @@
         }
 
         #error-box {
+            display: none;
             margin: auto;
             color: #fd8080;
             font-weight: 500;
             font-size: 18pt;
             border: 1px solid white;
-            padding: 25px;
+            padding: 3px 15px;
             margin-top: 20px;
         }
 
@@ -167,7 +168,7 @@
         </div>
     </div>
 
-    <div id="error-box" hidden>
+    <div id="error-box">
         <span class="error-box-title"></span>
     </div>
 
@@ -245,39 +246,6 @@
     }
   </script>
 
-    <!---------------->
-
-    <script id="text-vertex-shader" type="x-shader/x-vertex">
-        attribute vec4 a_position;
-        attribute vec2 a_texcoord;
-        
-        uniform mat4 u_matrix;
-        
-        varying vec2 v_texcoord;
-        
-        void main() {
-          // Multiply the position by the matrix.
-          gl_Position = u_matrix * a_position;
-        
-          // Pass the texcoord to the fragment shader.
-          v_texcoord = a_texcoord;
-        }
-    </script>
-
-    <!-- fragment shader -->
-    <script id="text-fragment-shader" type="x-shader/x-fragment">
-        precision mediump float;
-        
-        // Passed in from the vertex shader.
-        varying vec2 v_texcoord;
-        
-        uniform sampler2D u_texture;
-        
-        void main() {
-           gl_FragColor = texture2D(u_texture, v_texcoord);
-        }
-    </script>
-
     <!------------------>
 
     <script id="solid-color-vertex-shader" type="x-shader/x-vertex">
@@ -314,7 +282,8 @@
         uniform vec3 ambientColor;
         uniform vec3 diffuseColor;
         uniform vec3 specularColor;
-        uniform vec3 lightPos; 
+        uniform vec3 lightPos;
+        uniform float alpha;
                 
         void main() {
             vec4 color;
@@ -342,16 +311,17 @@
             // only specular
             if(mode == 4) color = vec4(Ks * specular * specularColor, 1.0);
 
-            gl_FragColor = color;
+            gl_FragColor = color * alpha;
+            // gl_FragColor = vec4(color.rgb, 1.0);
         }
     </script>
 
-    <script src="./resources/jquery-3.6.0.js"></script>
-    <script src="./resources/webgl-utils.js"></script>
-    <script src="./resources/dat.gui.js"></script>
-    <script src="./resources/m4.js"></script>
-    <script src="./resources/mesh_utils.js"></script>
-    <script src="./resources/glm_utils.js"></script>
+    <script src="./libs/jquery-3.6.0.js"></script>
+    <script src="./libs/webgl-utils.js"></script>
+    <script src="./libs/dat.gui.js"></script>
+    <script src="./libs/m4.js"></script>
+    <script src="./libs/mesh_utils.js"></script>
+    <script src="./libs/glm_utils.js"></script>
 
     <script type="module" src="grattacieli.js"></script>
     <script type="module" src="main.js"></script>

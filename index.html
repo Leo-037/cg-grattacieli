@@ -28,23 +28,7 @@
             width: 100%;
             height: 100%;
             aspect-ratio: 5/4;
-            background-color: rgb(78, 178, 128);
-        }
-
-        #error-box {
-            display: none;
-            margin: auto;
-            color: #fd8080;
-            font-weight: 500;
-            font-size: 18pt;
-            border: 1px solid white;
-            padding: 3px 15px;
-            margin-top: 20px;
-        }
-
-        .error-box-title {
-            color: #eee;
-            border-bottom: 1px solid gray;
+            background-color: #ccccff;
         }
 
         .container {
@@ -52,6 +36,7 @@
         }
 
         #options {
+            background-color: rgba(0, 0, 0, 0);
             display: flex;
             flex-direction: column;
             position: absolute;
@@ -61,24 +46,21 @@
         }
 
         .options-line {
-            flex:1;
+            flex: 1;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border-bottom: solid black 1px;
             padding: 0.5cqmin;
         }
 
         .btn-description {
             flex: 1;
             text-align: left;
-            padding-left: 1px;
         }
 
         .options-button {
             font-size: 2cqmin;
             display: inline;
-            /* margin: 0.5cqmin; */
         }
 
         #overlay {
@@ -119,37 +101,24 @@
             color: #ffffff;
         }
 
-        #message-area {
-            font-size: xx-large;
+        #gameEndedInfo {
+            display: flex;
+            flex: 1;
+            justify-content: space-around;
+            align-items: center;
             text-align: center;
             color: rgb(0, 225, 90);
-        }
-
-        .modal {
-            display: none;
-            position: fixed;
+            font-size: 4cqmin;
+            position: absolute;
             z-index: 1;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            overflow: auto;
-        }
-
-        .modal-content {
-            background-color: #fefefe;
-            margin: 15% auto;
-            padding: 15px;
-            border: 1px solid #888;
-            width: 75%;
         }
     </style>
 </head>
 
 <body>
-    <div id="gameEndedModal" class="modal">
-        <div class="modal-content" id="message-area">
-            <h3>Level complete!</h3>
+    <div hidden>
+        <div id="gameEndedInfo">
+            <span>Level complete!</span>
             <button type="button" class="button" id="btnHome"><strong>Home</strong></button>
             <!-- <button type="button" class="button" id="btnNextgame"><strong>Next level</strong></button> -->
         </div>
@@ -158,10 +127,10 @@
     <div class="container">
         <div id="canvas-container">
             <canvas id="canvas">
-                HTML5 canvas not supported in your browser or not working!
+                HTML5 canvas not supported or not working!
             </canvas>
-            <div id="options" hidden>
-            </div>
+
+            <div id="options" hidden></div>
 
             <div id="selector-area">
                 <div id="level-selector" class="levelSelector">
@@ -198,10 +167,6 @@
             <div>Id: <span id="info-id"></span></div>
             <div>Debug: <span id="info-extra"></span></div>
         </div>
-    </div>
-
-    <div id="error-box">
-        <span class="error-box-title"></span>
     </div>
 
 

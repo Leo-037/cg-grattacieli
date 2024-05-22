@@ -37,7 +37,7 @@ const colors = {
     3: m4.normalize([110, 255, 120]),
     4: m4.normalize([255, 200, 0]),
     5: m4.normalize([220, 50, 0]),
-    6: m4.normalize([255, 0, 230]),
+    6: m4.normalize([250, 0, 230]),
     7: m4.normalize([196, 0, 255]),
     8: m4.normalize([0, 0, 0]),
     9: m4.normalize([0, 0, 0]),
@@ -78,14 +78,14 @@ export function play(settings, gameEndedCallback) {
         swap: { value: true, description: "Swap skyscrapers", toggle: function () { this.value = !this.value } },
         // show a shadow of the skyscraper you picked up
         showGhost: { value: true, description: "Show ghosts", toggle: function () { this.value = !this.value } },
-        // show the entire scene in ortographic projection
-        orthographic: { value: false, description: "Ortographic view", toggle: function () { this.value = !this.value } },
         // show how many skyscrapers are left to place
         showRemaining: { value: true, description: "Show remaining", toggle: function () { this.value = !this.value } },
-        // draw the corners of the grid
-        drawCorners: { value: true, description: "Draw corners", toggle: function () { this.value = !this.value } },
         // change the color of the tiles to help the player
         helpers: { value: true, description: "Show correct and duplicates", toggle: function () { this.value = !this.value } },
+        // draw the corners of the grid
+        drawCorners: { value: true, description: "Draw corners", toggle: function () { this.value = !this.value } },
+        // show the entire scene in ortographic projection
+        orthographic: { value: false, description: "Ortographic view", toggle: function () { this.value = !this.value } },
     }
     const camera = {
         fov: 40,
@@ -124,7 +124,6 @@ export function play(settings, gameEndedCallback) {
     }
 
     const optionsDiv = $('#options');
-    optionsDiv.empty();
     for (const [k, option] of Object.entries(options)) {
         const toggle = () => { option.toggle(); $(`#${k}`).text(getBooleanSymbol(option.value)) };
         optionsDiv.append(
@@ -142,6 +141,8 @@ export function play(settings, gameEndedCallback) {
         );
     }
     optionsDiv.show();
+
+    const gameEndedDiv = $('#gameEndedInfo');
 
     skyscraperMeshData.sourceMesh = 'resources/objects/skyscraper/skyscraper.obj';
     var skyscraperMesh = LoadMesh(gl, skyscraperMeshData);
@@ -450,8 +451,10 @@ export function play(settings, gameEndedCallback) {
     let extraLookedAt = 0;
     let squarePickedFrom = null;
 
+    let minimapScale = 0;
 
     function render() {
+
         if (webglUtils.resizeCanvasToDisplaySize(gl.canvas)) {
             setFramebufferAttachmentSizes(gl.canvas.width, gl.canvas.height);
 
@@ -467,25 +470,36 @@ export function play(settings, gameEndedCallback) {
             selectorX = 0;
             selectorY = 0;
 
-            minimapWidth = gl.canvas.width - gameareaWidth;
+            minimapScale = 1 / 50 * gameareaWidth;
+
+            minimapWidth = gl.canvas.width - gameareaWidth - minimapScale * 2;
             minimapHeight = minimapWidth;
             minimapAspect = minimapWidth / minimapHeight;
-            minimapX = gameareaWidth;
-            minimapY = selectorHeight;
+            minimapX = gl.canvas.width - minimapScale - minimapWidth;
+            minimapY = selectorHeight + minimapScale;
 
-            extraWidth = gl.canvas.width - gameareaWidth;
-            extraHeight = gl.canvas.height - minimapHeight - selectorHeight;
+            extraWidth = minimapWidth;
+            extraHeight = gl.canvas.height - minimapHeight - selectorHeight - minimapScale * 3;
             extraAspect = extraWidth / extraHeight;
-            extraX = gameareaWidth;
-            extraY = selectorHeight + minimapHeight;
+            extraX = minimapX;
+            extraY = selectorHeight + minimapHeight + minimapScale * 2;
         }
 
         optionsDiv.css({
             left: canvas.getBoundingClientRect().x + extraX,
-            top: 0,
-            "width": minimapWidth,
+            top: minimapScale,
+            "width": extraWidth,
             "height": extraHeight
         });
+
+        if (!playingGame) {
+            gameEndedDiv.css({
+                left: 0,
+                top: gl.canvas.height - selectorHeight,
+                width: selectorWidth,
+                height: selectorHeight
+            });
+        }
 
         // ------ Draw the objects to the texture --------
 
@@ -501,7 +515,7 @@ export function play(settings, gameEndedCallback) {
 
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-        const projectionMatrix = camera.orto ?
+        const projectionMatrix = camera.orto || options.orthographic.value ?
             m4.orthographic(
                 -orto.gameareaCamOrthoUnits * gameareaAspect,  // left
                 orto.gameareaCamOrthoUnits * gameareaAspect,   // right
@@ -622,56 +636,58 @@ export function play(settings, gameEndedCallback) {
                 orto.cam1Far);
 
         const selectorViewProjectionMatrix = m4.multiply(selectorProjectionMatrix, selectorViewMatrix);
+        
+        if (playingGame) {
+            var n = settings.boardSize + 1; // all skyscrapers + the bin
+            var size = 1.5;
+            var radius = Math.sqrt(2 * (size ** 2)); // the size of the diagonal of the skyscrapers
+            var occupiedSpace = 2 * radius * n; // the space taken up by all skyscrapers
+            var nSpaces = n + 1; // the number of spaces between the objects
+            var width = 2 * (1 / selectorProjectionMatrix[0]); // width of the selector in scene coordinates 
 
-        var n = settings.boardSize + 1; // all skyscrapers + the bin
-        var size = 1.5;
-        var radius = Math.sqrt(2 * (size ** 2)); // the size of the diagonal of the skyscrapers
-        var occupiedSpace = 2 * radius * n; // the space taken up by all skyscrapers
-        var nSpaces = n + 1; // the number of spaces between the objects
-        var width = 2 * (1 / selectorProjectionMatrix[0]); // width of the selector in scene coordinates 
+            var spacing = ((width - occupiedSpace) / nSpaces); // the distance between objects
+            var xOffset = - width / 2 + radius; // the starting point to draw the row
+            var yOffset = -(settings.boardSize * size) / 2;
 
-        var spacing = ((width - occupiedSpace) / nSpaces); // the distance between objects
-        var xOffset = - width / 2 + radius; // the starting point to draw the row
-        var yOffset = -(settings.boardSize * size) / 2;
+            var binSize = 2;
+            var binHeight = 3;
 
-        var binSize = 2;
-        var binHeight = 3;
+            // the skyscrapers
+            for (let i = 1; i < n; i++) {
+                const height = i;
+                const xPos = xOffset + spacing * (i) + 2 * radius * (i - 1);
+                const yPos = yOffset + (height / size);
 
-        // the skyscrapers
-        for (let i = 1; i < n; i++) {
-            const height = i;
-            const xPos = xOffset + spacing * (i) + 2 * radius * (i - 1);
-            const yPos = yOffset + (height / size);
+                let worldMatrix = m4.identity();
+                worldMatrix = m4.translate(worldMatrix, xPos, yPos, -40);
+                worldMatrix = m4.xRotate(worldMatrix, degToRad(45));
+                worldMatrix = m4.yRotate(worldMatrix, degToRad(45));
+                worldMatrix = m4.scale(worldMatrix, size, height, size);
 
-            let worldMatrix = m4.identity();
-            worldMatrix = m4.translate(worldMatrix, xPos, yPos, -40);
-            worldMatrix = m4.xRotate(worldMatrix, degToRad(45));
-            worldMatrix = m4.yRotate(worldMatrix, degToRad(45));
-            worldMatrix = m4.scale(worldMatrix, size, height, size);
+                drawObject(pickingProgramInfo, grattacieloBufferInfo, {
+                    u_world: worldMatrix,
+                    u_id: getId(2 * board.length + height),
+                    u_viewProjection: selectorViewProjectionMatrix,
+                });
+            }
 
-            drawObject(pickingProgramInfo, grattacieloBufferInfo, {
-                u_world: worldMatrix,
-                u_id: getId(2 * board.length + height),
-                u_viewProjection: selectorViewProjectionMatrix,
-            });
-        }
-
-        // the bin
-        {
-            const xPos = xOffset + spacing * (n) + 2 * radius * (n - 1);
-            const yPos = yOffset + binHeight / binSize;
-            let worldMatrix = m4.identity();
-            worldMatrix = m4.translate(worldMatrix, xPos, yPos, -40);
-            worldMatrix = m4.xRotate(worldMatrix, degToRad(15));
-            worldMatrix = m4.yRotate(worldMatrix, degToRad(45));
-            worldMatrix = m4.scale(worldMatrix, binSize, binSize, binSize);
-            binID = selectorIdOffset + 1;
-            // on the texture, the bin is a cube to be easier to click
-            drawObject(pickingProgramInfo, cubeBufferInfo, {
-                u_world: worldMatrix,
-                u_id: getId(binID),
-                u_viewProjection: selectorViewProjectionMatrix,
-            })
+            // the bin
+            {
+                const xPos = xOffset + spacing * (n) + 2 * radius * (n - 1);
+                const yPos = yOffset + binHeight / binSize;
+                let worldMatrix = m4.identity();
+                worldMatrix = m4.translate(worldMatrix, xPos, yPos, -40);
+                worldMatrix = m4.xRotate(worldMatrix, degToRad(15));
+                worldMatrix = m4.yRotate(worldMatrix, degToRad(45));
+                worldMatrix = m4.scale(worldMatrix, binSize, binSize, binSize);
+                binID = selectorIdOffset + 1;
+                // on the texture, the bin is a cube to be easier to click
+                drawObject(pickingProgramInfo, cubeBufferInfo, {
+                    u_world: worldMatrix,
+                    u_id: getId(binID),
+                    u_viewProjection: selectorViewProjectionMatrix,
+                })
+            }
         }
 
         // ------ Read the pixel under the mouse
@@ -736,7 +752,7 @@ export function play(settings, gameEndedCallback) {
 
         gl.enable(gl.BLEND);
 
-        var distance = getPosFromIndex(settings.boardSize + 1) + 1;
+        var distance = getPosFromIndex(settings.boardSize + 1) + 0.5;
         var worldMatrix = m4.translate(m4.identity(), distance, 0, 0);
         drawDirectionSquare(worldMatrix, "E");
         var worldMatrix = m4.translate(m4.identity(), -distance, 0, 0);
@@ -746,7 +762,7 @@ export function play(settings, gameEndedCallback) {
         var worldMatrix = m4.translate(m4.identity(), 0, 0, -distance);
         drawDirectionSquare(worldMatrix, "N");
 
-        var point = followSquarePath(0, 0, distance - .5, camera.angleX);
+        var point = followSquarePath(0, 0, distance, camera.angleX);
         var worldMatrix = m4.translate(m4.identity(), point.x, 1, point.y);
         worldMatrix = m4.yRotate(worldMatrix, degToRad(180 - camera.angleX));
         worldMatrix = m4.scale(worldMatrix, 1.5, 1, 1.5);
@@ -763,87 +779,90 @@ export function play(settings, gameEndedCallback) {
 
         gl.disable(gl.CULL_FACE);
 
-        // the skyscrapers
-        for (let i = 1; i < n; i++) {
-            const height = i;
-            const xPos = xOffset + spacing * (i) + 2 * radius * (i - 1);
-            const yPos = yOffset + (height / size);
+        if (playingGame) {
+            // the skyscrapers
+            for (let i = 1; i < n; i++) {
+                const height = i;
+                const xPos = xOffset + spacing * (i) + 2 * radius * (i - 1);
+                const yPos = yOffset + (height / size);
 
-            let worldMatrix = m4.identity();
-            worldMatrix = m4.translate(worldMatrix, xPos, yPos, -40);
-            worldMatrix = m4.xRotate(worldMatrix, degToRad(45));
-            worldMatrix = m4.yRotate(worldMatrix, degToRad(45));
-            worldMatrix = m4.scale(worldMatrix, size, height, size);
+                let worldMatrix = m4.identity();
+                worldMatrix = m4.translate(worldMatrix, xPos, yPos, -40);
+                worldMatrix = m4.xRotate(worldMatrix, degToRad(45));
+                worldMatrix = m4.yRotate(worldMatrix, degToRad(45));
+                worldMatrix = m4.scale(worldMatrix, size, height, size);
 
-            let Ka = .6, Kd = .8;
-            if (board.filter(s => s.skyscraper === height).length >= settings.boardSize) {
-                Ka = .2;
-                Kd = .4;
-            }
-            if (height === id - 2 * board.length && !movingView) {
-                Ka += .4;
-                Kd += .2;
-            }
+                let Ka = .6, Kd = .8;
+                if (board.filter(s => s.skyscraper === height).length >= settings.boardSize) {
+                    Ka = .2;
+                    Kd = .4;
+                }
+                if (height === id - 2 * board.length && !movingView) {
+                    Ka += .4;
+                    Kd += .2;
+                }
 
-            drawObject(solidColorProgramInfo, grattacieloBufferInfo, {
-                projection: m4.multiply(selectorProjectionMatrix, selectorViewMatrix),
-                modelview: worldMatrix,
-                normalMat: m4.transpose(m4.inverse(worldMatrix)),
-                mode: light.mode, Ka: Ka, Kd: Kd, Ks: 0,
-                shininessVal: light.shininessVal,
-                ambientColor: colors[height], diffuseColor: colors[height],
-                specularColor: [1, 1, 1],
-                alpha: 1.0,
-                lightPos: [xPos - spacing / 2, yPos, 0],
-            });
+                drawObject(solidColorProgramInfo, grattacieloBufferInfo, {
+                    projection: m4.multiply(selectorProjectionMatrix, selectorViewMatrix),
+                    modelview: worldMatrix,
+                    normalMat: m4.transpose(m4.inverse(worldMatrix)),
+                    mode: light.mode, Ka: Ka, Kd: Kd, Ks: 0,
+                    shininessVal: light.shininessVal,
+                    ambientColor: colors[height], diffuseColor: colors[height],
+                    specularColor: [1, 1, 1],
+                    alpha: 1.0,
+                    lightPos: [xPos - spacing / 2, yPos, 0],
+                });
 
-            if (options.showRemaining.value) {
-                let remaining = settings.boardSize - placed[height];
-                if (remaining > 0) {
-                    worldMatrix = m4.translate(m4.identity(), xPos, -n / 2, 0);;
-                    worldMatrix = m4.xRotate(worldMatrix, degToRad(90))
-                    worldMatrix = m4.yRotate(worldMatrix, degToRad(90))
-                    worldMatrix = m4.scale(worldMatrix, size, size, size);
+                if (options.showRemaining.value) {
+                    let remaining = settings.boardSize - placed[height];
+                    if (remaining > 0) {
+                        worldMatrix = m4.translate(m4.identity(), xPos, -n / 2, 0);;
+                        worldMatrix = m4.xRotate(worldMatrix, degToRad(90))
+                        worldMatrix = m4.yRotate(worldMatrix, degToRad(90))
+                        worldMatrix = m4.scale(worldMatrix, size, size, size);
 
-                    gl.enable(gl.BLEND)
-                    drawObject(texturedProgramInfo, charactersBufferInfos[remaining], {
-                        u_matrix: computeWorldViewProjection(selectorProjectionMatrix, selectorViewMatrix, worldMatrix),
-                        u_texture: textureAtlas,
-                        u_worldInverseTranspose: m4.transpose(m4.inverse(worldMatrix)),
-                        u_reverseLightDirection: m4.normalize([0, light.y, 0])
-                    });
-                    gl.disable(gl.BLEND)
+                        gl.enable(gl.BLEND)
+                        drawObject(texturedProgramInfo, charactersBufferInfos[remaining], {
+                            u_matrix: computeWorldViewProjection(selectorProjectionMatrix, selectorViewMatrix, worldMatrix),
+                            u_texture: textureAtlas,
+                            u_worldInverseTranspose: m4.transpose(m4.inverse(worldMatrix)),
+                            u_reverseLightDirection: m4.normalize([0, light.y, 0])
+                        });
+                        gl.disable(gl.BLEND)
+                    }
                 }
             }
+
+            // the bin
+            {
+                const xPos = xOffset + spacing * (n) + 2 * radius * (n - 1);
+                const yPos = yOffset + binHeight / binSize;
+                let worldMatrix = m4.identity();
+                worldMatrix = m4.translate(worldMatrix, xPos, yPos, -40);
+                worldMatrix = m4.xRotate(worldMatrix, degToRad(15));
+                worldMatrix = m4.yRotate(worldMatrix, degToRad(45));
+                worldMatrix = m4.scale(worldMatrix, binSize, binSize, binSize);
+                let Ka = .6, Kd = .8;
+                if (extraLookedAt === BIN) {
+                    Ka += .4;
+                    Kd += .2;
+                }
+                let binColor = [0.8, 0.1, 0.1];
+                drawObject(solidColorProgramInfo, binBufferInfo, {
+                    projection: m4.multiply(selectorProjectionMatrix, selectorViewMatrix),
+                    modelview: worldMatrix,
+                    normalMat: m4.transpose(m4.inverse(worldMatrix)),
+                    mode: light.mode, Ka: Ka, Kd: Kd, Ks: 0,
+                    shininessVal: light.shininessVal,
+                    ambientColor: binColor, diffuseColor: binColor,
+                    specularColor: [1, 1, 1],
+                    alpha: 1.0,
+                    lightPos: [xPos - spacing / 2, yPos, 0],
+                })
+            }
         }
 
-        // the bin
-        {
-            const xPos = xOffset + spacing * (n) + 2 * radius * (n - 1);
-            const yPos = yOffset + binHeight / binSize;
-            let worldMatrix = m4.identity();
-            worldMatrix = m4.translate(worldMatrix, xPos, yPos, -40);
-            worldMatrix = m4.xRotate(worldMatrix, degToRad(15));
-            worldMatrix = m4.yRotate(worldMatrix, degToRad(45));
-            worldMatrix = m4.scale(worldMatrix, binSize, binSize, binSize);
-            let Ka = .6, Kd = .8;
-            if (extraLookedAt === BIN) {
-                Ka += .4;
-                Kd += .2;
-            }
-            let binColor = [0.8, 0.1, 0.1];
-            drawObject(solidColorProgramInfo, binBufferInfo, {
-                projection: m4.multiply(selectorProjectionMatrix, selectorViewMatrix),
-                modelview: worldMatrix,
-                normalMat: m4.transpose(m4.inverse(worldMatrix)),
-                mode: light.mode, Ka: Ka, Kd: Kd, Ks: 0,
-                shininessVal: light.shininessVal,
-                ambientColor: binColor, diffuseColor: binColor,
-                specularColor: [1, 1, 1],
-                alpha: 1.0,
-                lightPos: [xPos - spacing / 2, yPos, 0],
-            })
-        }
         // ------- Draw extra -------
 
         gl.viewport(extraX, extraY, extraWidth, extraHeight);
@@ -909,6 +928,7 @@ export function play(settings, gameEndedCallback) {
                             selectedSquare.skyscraper = 0
                         }
                         selectedSkyscraper = 0;
+                        squarePickedFrom = null;
                         selectedSquare = false;
                         holding = false;
                     }
@@ -1372,7 +1392,7 @@ function toFixedFloat(n, f) {
     return Math.floor((n * 10 ** f).toFixed(f)) / 10 ** f
 }
 
-function getTextureCoordinatesFromAtlas(c, pixelOffset = 1) {
+function getTextureCoordinatesFromAtlas(c, pixelOffset = 5) {
     let char = textureAtlas.pos[c];
 
     let maxX = textureAtlas.textureWidth;

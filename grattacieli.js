@@ -42,19 +42,15 @@ const colors = {
     8: m4.normalize([0, 0, 0]),
     9: m4.normalize([0, 0, 0]),
 }
-
-const gameareaColor = [0.8, 0.8, 1, 1];
+const gameAreaColor = [0.8, 0.8, 1, 1];
 const minimapColor = [1, 0.8, 0.3, 1];
 const selectorColor = [0.2, 0.2, 0.2, 1];
 const extraColor = [0.3, 0.7, 0.5, 1];
 
+
 let playingGame = false;
 
-
 export function play(settings, gameEndedCallback) {
-    var skyscraperMeshData = new Array();
-    var binMeshData = new Array();
-
     const BIN = 1;
     const CAMERA_N = 2;
     const CAMERA_E = 3;
@@ -66,26 +62,21 @@ export function play(settings, gameEndedCallback) {
     let cameraSouthID = -1;
     let cameraWestID = -1;
 
-    /** @type {HTMLCanvasElement} */
-    const canvas = document.querySelector('#canvas');
-    const gl = canvas.getContext('webgl');
-    if (!gl) {
-        return;
-    }
-
     const options = {
         // swap or overwrite the skyscraper looked at
         swap: { value: true, description: "Swap skyscrapers", toggle: function () { this.value = !this.value } },
         // show a shadow of the skyscraper you picked up
         showGhost: { value: true, description: "Show ghosts", toggle: function () { this.value = !this.value } },
         // show how many skyscrapers are left to place
-        showRemaining: { value: true, description: "Show remaining", toggle: function () { this.value = !this.value } },
+        showRemaining: { value: false, description: "Show remaining", toggle: function () { this.value = !this.value } },
         // change the color of the tiles to help the player
         helpers: { value: true, description: "Show correct and duplicates", toggle: function () { this.value = !this.value } },
+        // numbers rotate to follow camera
+        rotateNumbers: { value: true, description: "Rotate numbers with view", toggle: function () { this.value = !this.value } },
         // draw the corners of the grid
         drawCorners: { value: true, description: "Draw corners", toggle: function () { this.value = !this.value } },
-        // show the entire scene in ortographic projection
-        orthographic: { value: false, description: "Ortographic view", toggle: function () { this.value = !this.value } },
+        // show the entire scene in orthographic projection
+        orthographic: { value: false, description: "Orthographic view", toggle: function () { this.value = !this.value } },
     }
     const camera = {
         fov: 40,
@@ -119,6 +110,15 @@ export function play(settings, gameEndedCallback) {
         transparency: 0.5,
     }
 
+    // ------- PAGE COMPONENTS -------
+
+    /** @type {HTMLCanvasElement} */
+    const canvas = document.querySelector('#canvas');
+    const gl = canvas.getContext('webgl');
+    if (!gl) {
+        return;
+    }
+
     function getBooleanSymbol(value) {
         return value ? "✔" : "✘";
     }
@@ -144,9 +144,25 @@ export function play(settings, gameEndedCallback) {
 
     const gameEndedDiv = $('#gameEndedInfo');
 
+    // Debug text nodes
+    var angleXNode = document.createTextNode("");
+    var angleYNode = document.createTextNode("");
+    var idNode = document.createTextNode("");
+    var extraNode = document.createTextNode("");
+
+    // Add them to the debug overlay
+    document.querySelector("#info-angleX").appendChild(angleXNode);
+    document.querySelector("#info-angleY").appendChild(angleYNode);
+    document.querySelector("#info-id").appendChild(idNode);
+    document.querySelector("#info-extra").appendChild(extraNode);
+
+    // ------- BUFFERS -------
+
+    var skyscraperMeshData = [];
     skyscraperMeshData.sourceMesh = 'resources/objects/skyscraper/skyscraper.obj';
     var skyscraperMesh = LoadMesh(gl, skyscraperMeshData);
 
+    var binMeshData = [];
     binMeshData.sourceMesh = 'resources/objects//trashbin/bin.obj';
     var binMesh = LoadMesh(gl, binMeshData);
 
@@ -158,7 +174,6 @@ export function play(settings, gameEndedCallback) {
     for (let i = 1; i <= settings.boardSize; i++) {
         charactersBufferInfos[i] = createCharacterBufferInfo(gl, i);
     }
-
     charactersBufferInfos["N"] = createCharacterBufferInfo(gl, "N");
     charactersBufferInfos["E"] = createCharacterBufferInfo(gl, "E");
     charactersBufferInfos["S"] = createCharacterBufferInfo(gl, "S");
@@ -172,75 +187,11 @@ export function play(settings, gameEndedCallback) {
         wrong: createTileBufferInfo(gl, "wrong"),
     }
 
+    // ------- PROGRAMS -------
+
     const pickingProgramInfo = webglUtils.createProgramInfo(gl, ["pick-vertex-shader", "pick-fragment-shader"]);
     const texturedProgramInfo = webglUtils.createProgramInfo(gl, ['simple-texture-vertex-shader-3d', 'simple-texture-fragment-shader-3d']);
     const solidColorProgramInfo = webglUtils.createProgramInfo(gl, ['solid-color-vertex-shader', 'solid-color-fragment-shader']);
-
-
-    class Square extends DrawableObject {
-        constructor(x, z, id) {
-            super(tileBufferInfos.tile, texturedProgramInfo, m4.identity(), {}, id, m4.identity())
-            this.x = x;
-            this.z = z;
-            this.skyscraper = 0;
-            this.selected = false;
-        }
-
-        select() {
-            this.selected = true;
-            this.transform = m4.scale(m4.identity(), .9, 1, .9)
-        }
-
-        deselect() {
-            this.selected = false;
-            this.transform = m4.identity();
-        }
-    }
-
-    function getPosFromIndex(i) {
-        return (i / (settings.boardSize - 1) - .5) * 2 * (settings.boardSize - 1)
-    }
-
-    let board = [];
-
-    let id = 0;
-    if (settings.boardSize > 1) {
-        for (var zz = 0; zz < settings.boardSize; ++zz) {
-            var z = getPosFromIndex(zz)
-            for (var xx = 0; xx < settings.boardSize; ++xx) {
-                var x = getPosFromIndex(xx);
-                id += 1;
-                const square = new Square(x, z, id);
-                board.push(square);
-            }
-        }
-    }
-
-    let numbersAround = [];
-    let placed = {}
-    for (let i = 0; i < settings.boardSize; i++) {
-        let p1 = getPosFromIndex(i);
-        let p2 = settings.boardSize + 1;
-        // top -  left to right
-        numbersAround.push(new Number(p1, -p2, settings.disposition[i + 0]));
-        // right - top to bottom
-        numbersAround.push(new Number(p2, p1, settings.disposition[i + 1 * settings.boardSize]));
-        // bottom - left to right
-        numbersAround.push(new Number(p1, p2, settings.disposition[i + 2 * settings.boardSize]));
-        // left - top to bottom
-        numbersAround.push(new Number(-p2, p1, settings.disposition[i + 3 * settings.boardSize]));
-
-        placed[i + 1] = 0;
-    }
-
-    // computes the camera position as it orbits around the center
-    function getCameraPos() {
-        const X = camera.zoom * Math.cos(degToRad(camera.angleX)) * Math.sin(degToRad(camera.angleY))
-        const Z = camera.zoom * Math.sin(degToRad(camera.angleX)) * Math.sin(degToRad(camera.angleY))
-        const Y = camera.z + camera.zoom * Math.cos(degToRad(camera.angleY))
-
-        return [X, Y, Z]
-    }
 
     // ------- TEXTURES -------
 
@@ -285,6 +236,200 @@ export function play(settings, gameEndedCallback) {
 
     gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depthBuffer);
 
+    // ------- BOARD SETUP -------
+
+    class DrawableObject {
+        constructor(buffer, id) {
+            this.id = id;
+            this.buffer = buffer;
+            this.transform = m4.identity();
+            this.uniforms = {};
+            this.view = m4.identity();
+            this.projection = m4.identity();
+            this.worldMatrix = m4.identity();
+        }
+
+        drawTextured(texture) {
+            drawObject(texturedProgramInfo, this.buffer, {
+                u_matrix: computeWorldViewProjection(this.projection, this.view, this.worldMatrix),
+                u_texture: texture,
+                u_worldInverseTranspose: m4.transpose(m4.inverse(this.worldMatrix)),
+                u_reverseLightDirection: m4.normalize([0, light.y, 0])
+            })
+        }
+
+        drawForPicking() {
+            drawObject(pickingProgramInfo, this.buffer, {
+                u_world: this.worldMatrix,
+                u_id: getId(this.id),
+                u_viewProjection: m4.multiply(this.projection, this.view),
+            });
+        }
+    }
+
+    class Tile extends DrawableObject {
+        constructor(x, z, id) {
+            super(tileBufferInfos.tile, id)
+            this.x = x;
+            this.z = z;
+        }
+
+        drawForPicking(projectionMatrix, viewMatrix,) {
+            this.projection = projectionMatrix;
+            this.view = viewMatrix;
+            this.worldMatrix = m4.translate(m4.identity(), this.x, 0, this.z);
+            super.drawForPicking();
+        }
+
+        drawTextured(viewMatrix, projectionMatrix) {
+            this.view = viewMatrix;
+            this.projection = projectionMatrix;
+            var worldMatrix = m4.translate(m4.identity(), this.x, 0, this.z);
+            this.worldMatrix = m4.multiply(worldMatrix, this.transform);
+            super.drawTextured(textureAtlas);
+        }
+
+        drawNumber(n) {
+            drawObject(texturedProgramInfo, charactersBufferInfos[n], {
+                u_matrix: computeWorldViewProjection(this.projection, this.view, this.worldMatrix),
+                u_texture: textureAtlas,
+                u_worldInverseTranspose: m4.transpose(m4.inverse(this.worldMatrix)),
+                u_reverseLightDirection: m4.normalize([0, light.y, 0])
+            });
+        }
+    }
+
+    class Square extends Tile {
+        constructor(x, z, id) {
+            super(x, z, id)
+            this.skyscraper = 0;
+            this.selected = false;
+        }
+
+        skyscraperTransform(height) {
+            let worldMatrix = m4.translate(m4.identity(), this.x, height, this.z);
+            worldMatrix = m4.scale(worldMatrix, .9, height, .9);
+            return worldMatrix;
+        }
+
+        drawSkyscraper(skyscraper, ambient, diffuse, transparent, lightPos) {
+            const worldMatrix = this.skyscraperTransform(skyscraper);
+            drawObject(solidColorProgramInfo, grattacieloBufferInfo, {
+                projection: m4.multiply(this.projection, this.view),
+                modelview: worldMatrix,
+                normalMat: m4.transpose(m4.inverse(worldMatrix)),
+                mode: light.mode, Ka: ambient, Kd: diffuse, Ks: light.Ks,
+                shininessVal: light.shininessVal,
+                ambientColor: colors[skyscraper],
+                diffuseColor: colors[skyscraper],
+                specularColor: [1, 1, 1],
+                alpha: transparent ? light.transparency : 1.0,
+                lightPos: lightPos,
+            });
+        }
+
+        drawSkyscraperForPicking() {
+            const worldMatrix = this.skyscraperTransform(this.skyscraper);
+            drawObject(pickingProgramInfo, grattacieloBufferInfo, {
+                u_world: worldMatrix,
+                u_id: getId(this.id + board.length),
+                u_viewProjection: m4.multiply(this.projection, this.view),
+            });
+        }
+
+        select() {
+            this.selected = true;
+            this.transform = m4.scale(m4.identity(), .9, 1, .9)
+        }
+
+        deselect() {
+            this.selected = false;
+            this.transform = m4.identity();
+        }
+
+        drawNumber(skyscraper) {
+            this.worldMatrix = m4.translate(this.worldMatrix, 0, settings.boardSize * 2, 0);
+            this.worldMatrix = m4.yRotate(this.worldMatrix, degToRad(90));
+            super.drawNumber(skyscraper)
+        }
+    }
+
+    class OuterNumber extends Tile {
+        constructor(x, z, n, rotation = 0) {
+            super(x, z, tileBufferInfos.empty, -1);
+            this.n = n;
+            this.duplicates = false;
+            this.correct = false;
+            this.rotation = rotation;
+        }
+
+        drawTextured(viewMatrix, projectionMatrix) {
+            this.buffer = tileBufferInfos.empty;
+            if (options.helpers.value) {
+                if (this.correct && !this.duplicates) {
+                    this.buffer = tileBufferInfos.correct;
+                }
+                if (this.duplicates) {
+                    this.buffer = tileBufferInfos.wrong;
+                }
+            }
+            super.drawTextured(viewMatrix, projectionMatrix);
+        }
+    }
+
+
+    function getPosFromIndex(i) {
+        return (i / (settings.boardSize - 1) - .5) * 2 * (settings.boardSize - 1)
+    }
+
+    let board = [];
+    let numbersAround = [];
+    let corners = [];
+
+    let id = 0;
+    if (settings.boardSize > 1) {
+        for (var zz = 0; zz < settings.boardSize; ++zz) {
+            var z = getPosFromIndex(zz)
+            for (var xx = 0; xx < settings.boardSize; ++xx) {
+                var x = getPosFromIndex(xx);
+                id += 1;
+                const square = new Square(x, z, id);
+                board.push(square);
+            }
+        }
+    }
+
+    let placed = {}
+    for (let i = 0; i < settings.boardSize; i++) {
+        let p1 = getPosFromIndex(i);
+        let p2 = settings.boardSize + 1;
+        // top -  left to right
+        numbersAround.push(new OuterNumber(p1, -p2, settings.disposition[i + 0], 270));
+        // right - top to bottom
+        numbersAround.push(new OuterNumber(p2, p1, settings.disposition[i + 1 * settings.boardSize], 180));
+        // bottom - left to right
+        numbersAround.push(new OuterNumber(p1, p2, settings.disposition[i + 2 * settings.boardSize],  90));
+        // left - top to bottom
+        numbersAround.push(new OuterNumber(-p2, p1, settings.disposition[i + 3 * settings.boardSize], 0));
+
+        placed[i + 1] = 0;
+    }
+
+    corners.push(new OuterNumber(settings.boardSize + 1, settings.boardSize + 1, 0));
+    corners.push(new OuterNumber(-(settings.boardSize + 1), settings.boardSize + 1, 0));
+    corners.push(new OuterNumber(settings.boardSize + 1, -(settings.boardSize + 1), 0));
+    corners.push(new OuterNumber(-(settings.boardSize + 1), -(settings.boardSize + 1), 0));
+
+    // ------- RENDERING -------
+
+    // computes the camera position as it orbits around the center
+    function getCameraPos() {
+        const X = camera.zoom * Math.cos(degToRad(camera.angleX)) * Math.sin(degToRad(camera.angleY))
+        const Z = camera.zoom * Math.sin(degToRad(camera.angleX)) * Math.sin(degToRad(camera.angleY))
+        const Y = camera.z + camera.zoom * Math.cos(degToRad(camera.angleY))
+
+        return [X, Y, Z]
+    }
 
     function drawObject(programInfo, bufferInfo, uniforms) {
         gl.useProgram(programInfo.program);
@@ -299,74 +444,32 @@ export function play(settings, gameEndedCallback) {
     function drawScene(projectionMatrix, viewMatrix, tileRotation, minimap = false) {
         gl.enable(gl.BLEND);
 
-        numbersAround.forEach((/** @type Number */num) => {
-            let worldMatrix = m4.translate(m4.identity(), num.x, 0, num.z);
-            worldMatrix = m4.yRotate(worldMatrix, degToRad(tileRotation));
-            if (!minimap && camera.orto) {
-                worldMatrix = m4.zRotate(worldMatrix, degToRad(90));
-                worldMatrix = m4.translate(worldMatrix, -1, 0, 0)
-            }
+        let outerRingTransform = m4.identity();
+        
+        if (!minimap && camera.orto) {
+            outerRingTransform = m4.zRotate(outerRingTransform, degToRad(90));
+            outerRingTransform = m4.translate(outerRingTransform, -1, 0, 0)
+        }
+        
+        numbersAround.forEach((/** @type OuterNumber */num) => {
+            let rotation = options.rotateNumbers.value || minimap ? tileRotation : num.rotation;
+            num.transform = m4.yRotate(outerRingTransform, degToRad(rotation));
+            num.drawTextured(viewMatrix, projectionMatrix);
 
-            var background = tileBufferInfos.empty;
-
-            if (options.helpers.value) {
-                if (num.correct && !num.duplicates) {
-                    background = tileBufferInfos.correct;
-                }
-                if (num.duplicates) {
-                    background = tileBufferInfos.wrong;
-                }
-            }
-
-            drawObject(texturedProgramInfo, background, {
-                u_matrix: computeWorldViewProjection(projectionMatrix, viewMatrix, worldMatrix),
-                u_texture: textureAtlas,
-                u_worldInverseTranspose: m4.transpose(m4.inverse(worldMatrix)),
-                u_reverseLightDirection: m4.normalize([0, light.y, 0])
-            });
             if (num.n > 0) {
-                drawObject(texturedProgramInfo, charactersBufferInfos[num.n], {
-                    u_matrix: computeWorldViewProjection(projectionMatrix, viewMatrix, worldMatrix),
-                    u_texture: textureAtlas,
-                    u_worldInverseTranspose: m4.transpose(m4.inverse(worldMatrix)),
-                    u_reverseLightDirection: m4.normalize([0, light.y, 0])
-                });
+                num.drawNumber(num.n);
             }
         })
 
         if (options.drawCorners.value) {
-            function drawEmptySquare(worldMatrix) {
-                if (!minimap && camera.orto) {
-                    worldMatrix = m4.yRotate(worldMatrix, degToRad(tileRotation));
-                    worldMatrix = m4.zRotate(worldMatrix, degToRad(90));
-                    worldMatrix = m4.translate(worldMatrix, -1, 0, 0)
-                }
-                drawObject(texturedProgramInfo, tileBufferInfos.empty, {
-                    u_matrix: computeWorldViewProjection(projectionMatrix, viewMatrix, worldMatrix), u_texture: textureAtlas,
-                    u_worldInverseTranspose: m4.transpose(m4.inverse(worldMatrix)),
-                    u_reverseLightDirection: m4.normalize([0, light.y, 0])
-                });
-            }
-            var worldMatrix = m4.translate(m4.identity(), settings.boardSize + 1, 0, settings.boardSize + 1);
-            drawEmptySquare(worldMatrix);
-            var worldMatrix = m4.translate(m4.identity(), -(settings.boardSize + 1), 0, settings.boardSize + 1);
-            drawEmptySquare(worldMatrix);
-            var worldMatrix = m4.translate(m4.identity(), settings.boardSize + 1, 0, -(settings.boardSize + 1));
-            drawEmptySquare(worldMatrix);
-            var worldMatrix = m4.translate(m4.identity(), -(settings.boardSize + 1), 0, -(settings.boardSize + 1));
-            drawEmptySquare(worldMatrix);
+            corners.forEach((corner) => {
+                corner.transform = outerRingTransform;
+                corner.drawTextured(viewMatrix, projectionMatrix);
+            })
         }
 
         board.forEach((/** @type Square */ square) => {
-            var worldMatrix = m4.translate(m4.identity(), square.x, 0, square.z);
-            worldMatrix = m4.multiply(worldMatrix, square.transform);
-
-            drawObject(texturedProgramInfo, tileBufferInfos.tile, {
-                u_matrix: computeWorldViewProjection(projectionMatrix, viewMatrix, worldMatrix),
-                u_texture: textureAtlas,
-                u_worldInverseTranspose: m4.transpose(m4.inverse(worldMatrix)),
-                u_reverseLightDirection: m4.normalize([0, light.y, 0])
-            });
+            square.drawTextured(viewMatrix, projectionMatrix);
 
             let skyscraper;
             let Ka = light.Ka, Kd = light.Kd;
@@ -394,46 +497,24 @@ export function play(settings, gameEndedCallback) {
             }
 
             if (skyscraper > 0) {
-                var worldMatrix = m4.translate(m4.identity(), square.x, skyscraper, square.z);
-                worldMatrix = m4.scale(worldMatrix, .9, skyscraper, .9);
                 const cameraPos = getCameraPos();
-                drawObject(solidColorProgramInfo, grattacieloBufferInfo, {
-                    projection: m4.multiply(projectionMatrix, viewMatrix),
-                    modelview: worldMatrix,
-                    normalMat: m4.transpose(m4.inverse(worldMatrix)),
-                    mode: light.mode,
-                    Ka: Ka,           // ambient
-                    Kd: Kd,           // diffuse
-                    Ks: light.Ks,     // specular
-                    shininessVal: light.shininessVal,
-                    ambientColor: colors[skyscraper],
-                    diffuseColor: colors[skyscraper],
-                    specularColor: [1, 1, 1],
-                    alpha: transparent ? light.transparency : 1.0,
-                    lightPos: minimap ? [square.x, 20, square.z] : [cameraPos[0], 8, cameraPos[2]],
-                });
+                const lightPos = minimap ? [square.x, 20, square.z] : [cameraPos[0], 8, cameraPos[2]];
+                square.drawSkyscraper(skyscraper, Ka, Kd, transparent, lightPos);
                 if (minimap) {
-                    var worldMatrix = m4.translate(m4.identity(), square.x, minimap ? settings.boardSize * 2 : 0, square.z);
-                    worldMatrix = m4.yRotate(worldMatrix, degToRad(90));
-                    drawObject(texturedProgramInfo, charactersBufferInfos[skyscraper], {
-                        u_matrix: computeWorldViewProjection(projectionMatrix, viewMatrix, worldMatrix),
-                        u_texture: textureAtlas,
-                        u_worldInverseTranspose: m4.transpose(m4.inverse(worldMatrix)),
-                        u_reverseLightDirection: m4.normalize([0, light.y, 0])
-                    });
+                    square.drawNumber(skyscraper);
                 }
             }
         });
         gl.disable(gl.BLEND);
     }
 
+
     let gameareaHeight, gameareaWidth, gameareaAspect, gameareaX, gameareaY;
     let minimapWidth, minimapHeight, minimapAspect, minimapX, minimapY;
     let selectorWidth, selectorHeight, selectorAspect, selectorX, selectorY;
     let extraWidth, extraHeight, extraAspect, extraX, extraY;
 
-    let mouseX = -1;
-    let mouseY = -1;
+    let mouseX = -1, mouseY = -1;
     let oldPickId = -1;
 
     let lastRotation = 0;
@@ -451,7 +532,7 @@ export function play(settings, gameEndedCallback) {
     let extraLookedAt = 0;
     let squarePickedFrom = null;
 
-    let minimapScale = 0;
+    let minimapMargin = 0;
 
     function render() {
 
@@ -470,38 +551,38 @@ export function play(settings, gameEndedCallback) {
             selectorX = 0;
             selectorY = 0;
 
-            minimapScale = 1 / 50 * gameareaWidth;
+            minimapMargin = 1 / 50 * gameareaWidth;
 
-            minimapWidth = gl.canvas.width - gameareaWidth - minimapScale * 2;
+            minimapWidth = gl.canvas.width - gameareaWidth - minimapMargin * 2;
             minimapHeight = minimapWidth;
             minimapAspect = minimapWidth / minimapHeight;
-            minimapX = gl.canvas.width - minimapScale - minimapWidth;
-            minimapY = selectorHeight + minimapScale;
+            minimapX = gl.canvas.width - minimapMargin - minimapWidth;
+            minimapY = selectorHeight + minimapMargin;
 
             extraWidth = minimapWidth;
-            extraHeight = gl.canvas.height - minimapHeight - selectorHeight - minimapScale * 3;
+            extraHeight = gl.canvas.height - minimapHeight - selectorHeight - minimapMargin * 3;
             extraAspect = extraWidth / extraHeight;
             extraX = minimapX;
-            extraY = selectorHeight + minimapHeight + minimapScale * 2;
+            extraY = selectorHeight + minimapHeight + minimapMargin * 2;
         }
 
         optionsDiv.css({
             left: canvas.getBoundingClientRect().x + extraX,
-            top: minimapScale,
+            top: minimapMargin,
             "width": extraWidth,
             "height": extraHeight
         });
 
         if (!playingGame) {
             gameEndedDiv.css({
-                left: 0,
+                left: canvas.getBoundingClientRect().x,
                 top: gl.canvas.height - selectorHeight,
                 width: selectorWidth,
                 height: selectorHeight
             });
         }
 
-        // ------ Draw the objects to the texture --------
+        // ------ Draw the objects to the PICKING TEXTURE --------
 
         gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
 
@@ -531,26 +612,10 @@ export function play(settings, gameEndedCallback) {
         const cameraMatrix = m4.lookAt(cameraPosition, target, up);
         const viewMatrix = m4.inverse(cameraMatrix);
 
-        const viewProjectionMatrix = m4.multiply(projectionMatrix, viewMatrix);
-
         board.forEach((/**@type Square*/ square) => {
-            let worldMatrix = m4.translate(m4.identity(), square.x, 0, square.z);
-
-            drawObject(pickingProgramInfo, tileBufferInfos.tile, {
-                u_world: worldMatrix,
-                u_id: getId(square.id),
-                u_viewProjection: viewProjectionMatrix,
-            });
-
+            square.drawForPicking(projectionMatrix, viewMatrix);
             if (square.skyscraper > 0) {
-                let worldMatrix = m4.translate(m4.identity(), square.x, square.skyscraper, square.z);
-                worldMatrix = m4.scale(worldMatrix, .9, square.skyscraper, .9);
-
-                drawObject(pickingProgramInfo, grattacieloBufferInfo, {
-                    u_world: worldMatrix,
-                    u_id: getId(square.id + board.length),
-                    u_viewProjection: viewProjectionMatrix,
-                });
+                square.drawSkyscraperForPicking();
             }
         });
 
@@ -572,30 +637,15 @@ export function play(settings, gameEndedCallback) {
                 orto.cam1Near,
                 orto.cam1Far);
 
-        const minimapViewProjectionMatrix = m4.multiply(minimapProjectionMatrix, minimapViewMatrix);
-
         board.forEach((/**@type Square*/ square) => {
-            let worldMatrix = m4.translate(m4.identity(), square.x, 0, square.z);
-
-            drawObject(pickingProgramInfo, tileBufferInfos.tile, {
-                u_world: worldMatrix,
-                u_id: getId(square.id),
-                u_viewProjection: minimapViewProjectionMatrix,
-            });
-
+            square.drawForPicking(minimapProjectionMatrix, minimapViewMatrix);
             if (square.skyscraper > 0) {
-                let worldMatrix = m4.translate(m4.identity(), square.x, square.skyscraper, square.z);
-                worldMatrix = m4.scale(worldMatrix, 1, square.skyscraper, 1);
-
-                drawObject(pickingProgramInfo, grattacieloBufferInfo, {
-                    u_world: worldMatrix,
-                    u_id: getId(square.id + board.length),
-                    u_viewProjection: minimapViewProjectionMatrix,
-                });
+                square.drawSkyscraperForPicking();
             }
         });
 
-        function drawSquareForTexture(worldMatrix, id) {
+        const minimapViewProjectionMatrix = m4.multiply(minimapProjectionMatrix, minimapViewMatrix);
+        function directionButtonForTexture(worldMatrix, id) {
             worldMatrix = m4.yRotate(worldMatrix, degToRad(0));
             drawObject(pickingProgramInfo, tileBufferInfos.empty, {
                 u_world: worldMatrix, u_id: getId(id),
@@ -606,17 +656,16 @@ export function play(settings, gameEndedCallback) {
         var distance = getPosFromIndex(settings.boardSize + 1) + 1;
         cameraEastID = selectorIdOffset + 2;
         var worldMatrix = m4.translate(m4.identity(), distance, 0, 0);
-        drawSquareForTexture(worldMatrix, cameraEastID);
+        directionButtonForTexture(worldMatrix, cameraEastID);
         cameraWestID = selectorIdOffset + 3;
         var worldMatrix = m4.translate(m4.identity(), -distance, 0, 0);
-        drawSquareForTexture(worldMatrix, cameraWestID);
+        directionButtonForTexture(worldMatrix, cameraWestID);
         cameraSouthID = selectorIdOffset + 4;
         var worldMatrix = m4.translate(m4.identity(), 0, 0, distance);
-        drawSquareForTexture(worldMatrix, cameraSouthID);
+        directionButtonForTexture(worldMatrix, cameraSouthID);
         cameraNorthID = selectorIdOffset + 5;
         var worldMatrix = m4.translate(m4.identity(), 0, 0, -distance);
-        drawSquareForTexture(worldMatrix, cameraNorthID);
-
+        directionButtonForTexture(worldMatrix, cameraNorthID);
 
         gl.viewport(selectorX, selectorY, selectorWidth, selectorHeight);
         gl.scissor(selectorX, selectorY, selectorWidth, selectorHeight);
@@ -636,21 +685,23 @@ export function play(settings, gameEndedCallback) {
                 orto.cam1Far);
 
         const selectorViewProjectionMatrix = m4.multiply(selectorProjectionMatrix, selectorViewMatrix);
-        
+
+        let n, size, radius, occupiedSpace, nSpaces, width, spacing, xOffset, yOffset, binSize, binHeight;
+
         if (playingGame) {
-            var n = settings.boardSize + 1; // all skyscrapers + the bin
-            var size = 1.5;
-            var radius = Math.sqrt(2 * (size ** 2)); // the size of the diagonal of the skyscrapers
-            var occupiedSpace = 2 * radius * n; // the space taken up by all skyscrapers
-            var nSpaces = n + 1; // the number of spaces between the objects
-            var width = 2 * (1 / selectorProjectionMatrix[0]); // width of the selector in scene coordinates 
+            n = settings.boardSize + 1; // all skyscrapers + the bin
+            size = 1.5;
+            radius = Math.sqrt(2 * (size ** 2)); // the size of the diagonal of the skyscrapers
+            occupiedSpace = 2 * radius * n; // the space taken up by all skyscrapers
+            nSpaces = n + 1; // the number of spaces between the objects
+            width = 2 * (1 / selectorProjectionMatrix[0]); // width of the selector in scene coordinates
 
-            var spacing = ((width - occupiedSpace) / nSpaces); // the distance between objects
-            var xOffset = - width / 2 + radius; // the starting point to draw the row
-            var yOffset = -(settings.boardSize * size) / 2;
+            spacing = ((width - occupiedSpace) / nSpaces); // the distance between objects
+            xOffset = - width / 2 + radius; // the starting point to draw the row
+            yOffset = -(settings.boardSize * size) / 2;
 
-            var binSize = 2;
-            var binHeight = 3;
+            binSize = 2;
+            binHeight = 3;
 
             // the skyscrapers
             for (let i = 1; i < n; i++) {
@@ -700,7 +751,8 @@ export function play(settings, gameEndedCallback) {
 
         lookingAt(id);
 
-        // ------------- Draw the objects to the canvas -------------
+
+        // ------------- Draw the objects to the CANVAS -------------
 
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         gl.enable(gl.DEPTH_TEST);
@@ -712,7 +764,7 @@ export function play(settings, gameEndedCallback) {
 
         gl.viewport(gameareaX, gameareaY, gameareaWidth, gameareaHeight);
         gl.scissor(gameareaX, gameareaY, gameareaWidth, gameareaHeight);
-        gl.clearColor(...gameareaColor);
+        gl.clearColor(...gameAreaColor);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
         let rotation = lastRotation;
@@ -881,6 +933,8 @@ export function play(settings, gameEndedCallback) {
         requestAnimationFrame(render);
     }
 
+    // ------- GAME LOGIC -------
+
     function lookingAt(id) {
         function lookingAtCamera(dir) {
             extraLookedAt = dir;
@@ -894,9 +948,9 @@ export function play(settings, gameEndedCallback) {
             /**@type Square*/
             let square;
             if (oldPickId <= board.length) {
-                square = board.filter(s => s.id == oldPickId)[0]
+                square = board.filter(s => s.id === oldPickId)[0]
             } else if (oldPickId > board.length) {
-                square = board.filter(s => s.id + board.length == oldPickId)[0]
+                square = board.filter(s => s.id + board.length === oldPickId)[0]
             }
             if (square) {
                 square.deselect();
@@ -912,9 +966,9 @@ export function play(settings, gameEndedCallback) {
             /**@type Square*/
             let square;
             if (id <= board.length) { // looking at a square
-                square = board.filter(s => s.id == id)[0]
+                square = board.filter(s => s.id === id)[0]
             } else if (id > board.length && id <= 2 * board.length) { // looking at a skyscraper
-                square = board.filter(s => s.id + board.length == id)[0]
+                square = board.filter(s => s.id + board.length === id)[0]
             } else if (id > 2 * board.length && id <= selectorIdOffset) {
                 if (selectedSkyscraper === 0 && clicking && !holding) {
                     holding = true;
@@ -1046,7 +1100,7 @@ export function play(settings, gameEndedCallback) {
     canvas.addEventListener('wheel', handleWheel);
 
     function handleMouseDown(e) {
-        if (e.which == 1) { // the left button
+        if (e.which === 1) { // the left button
             e.preventDefault();
             usingTouch = false;
 
@@ -1058,7 +1112,7 @@ export function play(settings, gameEndedCallback) {
     }
 
     function handleMouseUp(e) {
-        if (e.which == 1) { // the left button
+        if (e.which === 1) { // the left button
             e.preventDefault();
 
             clicking = false;
@@ -1214,43 +1268,8 @@ export function play(settings, gameEndedCallback) {
         camera.orto = true;
     }
 
-
-    // Debug text nodes
-    var angleXNode = document.createTextNode("");
-    var angleYNode = document.createTextNode("");
-    var idNode = document.createTextNode("");
-    var extraNode = document.createTextNode("");
-
-    // Add them to the debug overlay
-    document.querySelector("#info-angleX").appendChild(angleXNode);
-    document.querySelector("#info-angleY").appendChild(angleYNode);
-    document.querySelector("#info-id").appendChild(idNode);
-    document.querySelector("#info-extra").appendChild(extraNode);
-
-
     playingGame = true;
     requestAnimationFrame(render);
-}
-
-class DrawableObject {
-    constructor(buffer, programInfo, transform, uniforms, id, projection) {
-        this.id = id;
-        this.buffer = buffer;
-        this.programInfo = programInfo;
-        this.transform = transform;
-        this.uniforms = uniforms;
-        this.projection = projection;
-    }
-}
-
-class Number {
-    constructor(x, z, n) {
-        this.x = x;
-        this.z = z;
-        this.n = n;
-        this.duplicates = false;
-        this.correct = false;
-    }
 }
 
 function check(size, board, /** @type Number[] */numbersAround, placed) {
@@ -1274,12 +1293,12 @@ function check(size, board, /** @type Number[] */numbersAround, placed) {
         for (let j = 0; j < size; j++) {
             let rowPiece = board[i * size + j].skyscraper;
             let colPiece = board[i + j * size].skyscraper;
-            if (row.includes(rowPiece) && rowPiece != 0) {
+            if (row.includes(rowPiece) && rowPiece !== 0) {
                 won = false;
                 leftN.duplicates = true;
                 rightN.duplicates = true;
             }
-            if (col.includes(colPiece) && colPiece != 0) {
+            if (col.includes(colPiece) && colPiece !== 0) {
                 won = false;
                 topN.duplicates = true;
                 bottomN.duplicates = true;
@@ -1380,10 +1399,10 @@ function showError(errorText) {
 
 function computeWorldViewProjection(projectionMatrix, viewMatrix, worldMatrix) {
     // The matrix that maps the 3D space as seen from the camera to the 2D projection 
-    let viewProjectionMatrix = m4.multiply(projectionMatrix, viewMatrix);
+    const viewProjectionMatrix = m4.multiply(projectionMatrix, viewMatrix);
 
     // Apply the "world" changes to the 3D space
-    var worldViewProjectionMatrix = m4.multiply(viewProjectionMatrix, worldMatrix);
+    const worldViewProjectionMatrix = m4.multiply(viewProjectionMatrix, worldMatrix);
 
     return worldViewProjectionMatrix;
 }

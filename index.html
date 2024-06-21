@@ -33,6 +33,7 @@
 
         .container {
             position: relative;
+            display: flex;
         }
 
         #options {
@@ -62,7 +63,7 @@
         .options-button {
             font-size: 2cqmin;
             text-align: center;
-            height:  3cqmin;
+            height: 3cqmin;
             width: 3cqmin;
         }
 
@@ -128,7 +129,8 @@
     </div>
 
     <div class="container">
-        <div id="canvas-container">
+        <div id="three-container" style="flex-grow: 1;" hidden></div>
+        <div id="canvas-container" hidden>
             <canvas id="canvas">
                 HTML5 canvas not supported or not working!
             </canvas>
@@ -164,7 +166,7 @@
             </div>
         </div>
 
-        <div id="overlay" hidden>
+        <div id="overlay" >
             <div>AngleX: <span id="info-angleX"></span></div>
             <div>AngleY: <span id="info-angleY"></span></div>
             <div>Id: <span id="info-id"></span></div>
@@ -313,6 +315,15 @@
 
             gl_FragColor = color * alpha;
             // gl_FragColor = vec4(color.rgb, 1.0);
+        }
+    </script>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+            }
         }
     </script>
 

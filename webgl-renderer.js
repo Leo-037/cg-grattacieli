@@ -38,15 +38,26 @@ const extraColor = [0.3, 0.7, 0.5, 1];
 
 export const BIN = 5;
 
-export function WebGLRenderer(game, canvas) {
+export function WebGLRenderer(game) {
     $('#canvas-container').show();
 
     const gameEndedDiv = $('#gameEndedInfo');
     const optionsDiv = $('#options');
-    const gl = canvas.getContext('webgl');
+    /** @type {HTMLCanvasElement} */
+    const canvas = $('#canvas');
+    const gl = canvas[0].getContext('webgl');
     if (!gl) {
         return;
     }
+
+    canvas.on('mousedown', (e) => handleMouseDown(e));
+    canvas.on('mousemove', (e) => handleMouseMove(e));
+
+    canvas.on('touchstart', (e) => handleTouchStart(e));
+    canvas.on('touchmove', (e) => handleTouchMove(e));
+
+    canvas.on('wheel', (e) => handleWheel(e));
+    $(document).on('keydown', (e) => handleKeyDown(e));
 
     // ------- BUFFERS -------
 
@@ -423,7 +434,7 @@ export function WebGLRenderer(game, canvas) {
         }
 
         optionsDiv.css({
-            left: canvas.getBoundingClientRect().x + extraX,
+            left: canvas[0].getBoundingClientRect().x + extraX,
             top: minimapMargin,
             "width": extraWidth,
             "height": extraHeight
@@ -431,7 +442,7 @@ export function WebGLRenderer(game, canvas) {
 
         if (!game.playing) {
             gameEndedDiv.css({
-                left: canvas.getBoundingClientRect().x,
+                left: canvas[0].getBoundingClientRect().x,
                 top: gl.canvas.height - selectorHeight,
                 width: selectorWidth,
                 height: selectorHeight
@@ -934,7 +945,10 @@ export function WebGLRenderer(game, canvas) {
     }
 
     for (const [k, option] of Object.entries(game.options)) {
-        const toggle = () => { option.toggle(); $(`#${k}`).text(getBooleanSymbol(option.value)) };
+        const toggle = () => {
+            option.toggle();
+            $(`#${k}`).text(getBooleanSymbol(option.value)).css('color', option.value ? 'green' : 'red');
+        };
         optionsDiv.append(
             $('<div/>', { "class": "options-line" })
                 .append([
@@ -945,7 +959,7 @@ export function WebGLRenderer(game, canvas) {
                         type: "button",
                         text: getBooleanSymbol(option.value),
                         on: { click: toggle, tap: toggle },
-                    })
+                    }).css('color', option.value ? 'green' : 'red')
                 ])
         );
     }
@@ -963,10 +977,133 @@ export function WebGLRenderer(game, canvas) {
     document.querySelector("#info-id").appendChild(idNode);
     document.querySelector("#info-extra").appendChild(extraNode);
 
+    let startMousePos = [-1, -1];
+
+    function handleKeyDown(event) {
+        const key = event.key;
+        switch (key.toLowerCase()) {
+            case "w":
+                game.rotateUp();
+                break;
+            case "a":
+                game.rotateLeft();
+                break;
+            case "s":
+                game.rotateDown();
+                break;
+            case "d":
+                game.rotateRight();
+                break;
+            case "e":
+                game.changeViewSnapClockwise();
+                break;
+            case "q":
+                game.changeViewSnapCounterclockwise();
+                break;
+        }
+    }
+
+    function handleMouseDown(e) {
+        switch (e.which) {
+            case 1 || 2:
+                e.preventDefault();
+                game.controls.usingTouch = false;
+                startMousePos = [e.clientX, e.clientY];
+                window.addEventListener('mouseup', (e) => handleMouseUp(e));
+            case 1: // the left button
+                game.controls.clicking = true;
+                break;
+            case 2: // the middle button
+                game.controls.panning = true;
+                break;
+
+        }
+    }
+
+    function handleMouseUp(e) {
+        switch (e.which) {
+            case 1 || 2:
+                e.preventDefault();
+                window.removeEventListener('mouseup', handleMouseUp);
+            case 1: // the left button
+                game.controls.clicking = false;
+                break;
+            case 2: // the middle button
+                game.controls.panning = false;
+                break;
+        }
+    }
+
+    function handleMouseMove(e) {
+        e.preventDefault();
+        game.controls.usingTouch = false;
+
+        const rect = canvas[0].getBoundingClientRect();
+        game.controls.mouseX = e.clientX - rect.left;
+        game.controls.mouseY = e.clientY - rect.top;
+
+        if (game.controls.movingView) {
+            game.camera.angleX += -1 / game.camera.slowness * (startMousePos[0] - e.clientX);
+            game.camera.angleY += 1 / game.camera.slowness * (startMousePos[1] - e.clientY);
+            game.correctAngles();
+        }
+        if (game.controls.panning) {
+            game.camera.test += -1 / game.camera.panSlowness * (startMousePos[1] - e.clientY);
+        }
+        startMousePos = [e.clientX, e.clientY];
+    }
+
+    function handleTouchStart(e, game) {
+        e.preventDefault();
+        game.controls.usingTouch = true;
+
+        game.controls.clicking = true;
+        window.addEventListener('touchend', game.handleTouchEnd);
+
+        const rect = canvas[0].getBoundingClientRect();
+        game.controls.mouseX = e.touches[0].clientX - rect.left;
+        game.controls.mouseY = e.touches[0].clientY - rect.top;
+
+        startMousePos = [e.touches[0].clientX, e.touches[0].clientY];
+    }
+
+    function handleTouchEnd(e) {
+        e.preventDefault();
+
+        game.controls.clicking = false;
+
+        window.removeEventListener('mouseup', game.handleTouchStart);
+    }
+
+    function handleTouchMove(e) {
+        e.preventDefault();
+
+        const rect = canvas[0].getBoundingClientRect();
+        game.controls.mouseX = e.touches[0].clientX - rect.left;
+        game.controls.mouseY = e.touches[0].clientY - rect.top;
+
+        if (game.controls.movingView) {
+            game.camera.angleX += -1 / game.camera.slowness * (startMousePos[0] - e.touches[0].clientX);
+            game.camera.angleY += 1 / game.camera.slowness * (startMousePos[1] - e.touches[0].clientY);
+            game.correctAngles();
+        }
+        startMousePos = [e.touches[0].clientX, e.touches[0].clientY];
+    }
+
+    function handleWheel(e) {
+        e.preventDefault();
+
+        if (!game.camera.orto) { // zoom only when in perspective view
+            const newZoom = game.camera.zoom * Math.pow(2, e.deltaY * 0.001);
+            game.camera.zoom = Math.max(game.camera.minZoom, Math.min(game.camera.maxZoom, newZoom));
+        }
+    }
 
     game.playing = true;
     requestAnimationFrame(render);
 }
+
+
 
 function followSquarePath(centerX, centerY, size, deg) {
     var theta = degToRad(360 - deg);

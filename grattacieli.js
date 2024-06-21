@@ -105,7 +105,7 @@ export function play(settings, gameEndedCallback) {
             panning: false,
         }
 
-        constructor(settings, gameContainer) {
+        constructor(settings) {
             this.size = settings.boardSize;
             this.disposition = settings.disposition;
             /** @type Lot[] */ this.board = [];
@@ -113,10 +113,8 @@ export function play(settings, gameEndedCallback) {
             /** @type Square[] */ this.corners = [];
             this.placed = {};
             this.playing = false;
-            this.gameContainer = gameContainer;
 
             this.setupBoard();
-            this.setupInputEvents();
         }
 
         setupBoard() {
@@ -150,17 +148,6 @@ export function play(settings, gameEndedCallback) {
             this.corners.push(new Square(-(this.size + 1), this.size + 1, 0));
             this.corners.push(new Square(this.size + 1, -(this.size + 1), 0));
             this.corners.push(new Square(-(this.size + 1), -(this.size + 1), 0));
-        }
-
-        setupInputEvents() {
-            this.gameContainer.addEventListener('mousedown', (e) => handleMouseDown(e, this));
-            this.gameContainer.addEventListener('mousemove', (e) => handleMouseMove(e, this));
-
-            this.gameContainer.addEventListener('touchstart', (e) => handleTouchStart(e, this));
-            this.gameContainer.addEventListener('touchmove', (e) => handleTouchMove(e, this));
-
-            this.gameContainer.addEventListener('wheel', (e) => handleWheel(e, this));
-            document.addEventListener('keydown', (e) => handleKeyDown(e, this));
         }
 
         check() {
@@ -260,7 +247,6 @@ export function play(settings, gameEndedCallback) {
                 this.camera.angleY = 0.01
             }
         }
-
         rotateRight() {
             this.camera.angleX -= this.camera.keyMovement;
             this.correctAngles();
@@ -303,7 +289,6 @@ export function play(settings, gameEndedCallback) {
             this.camera.angleY = 90;
             this.camera.orto = true;
         }
-
         setSnap(dir) {
             switch (dir) {
                 case CAMERA_E:
@@ -324,135 +309,12 @@ export function play(settings, gameEndedCallback) {
         }
     }
 
-    /** @type {HTMLCanvasElement} */
-    const canvas = document.querySelector('#canvas');
-    const game = new Game(settings, canvas);
+    const game = new Game(settings);
 
-    WebGLRenderer(game, canvas);
+    WebGLRenderer(game);
 
     // ThreejsRenderer(game);
 
-    let startMousePos = [-1, -1];
-
-    function handleKeyDown(event) {
-        const key = event.key;
-        switch (key.toLowerCase()) {
-            case "w":
-                game.rotateUp();
-                break;
-            case "a":
-                game.rotateLeft();
-                break;
-            case "s":
-                game.rotateDown();
-                break;
-            case "d":
-                game.rotateRight();
-                break;
-            case "e":
-                game.changeViewSnapClockwise();
-                break;
-            case "q":
-                game.changeViewSnapCounterclockwise();
-                break;
-        }
-    }
-
-    function handleMouseDown(e, game) {
-        switch (e.which) {
-            case 1 || 2:
-                e.preventDefault();
-                game.controls.usingTouch = false;
-                startMousePos = [e.clientX, e.clientY];
-                window.addEventListener('mouseup', (e) => handleMouseUp(e, game));
-            case 1: // the left button
-                game.controls.clicking = true;
-                break;
-            case 2: // the middle button
-                game.controls.panning = true;
-                break;
-            
-        }
-    }
-
-    function handleMouseUp(e, game) {
-        switch (e.which) {
-            case 1 || 2:
-                e.preventDefault();
-                window.removeEventListener('mouseup', handleMouseUp);
-            case 1: // the left button
-                game.controls.clicking = false;
-                break;
-            case 2: // the middle button
-                game.controls.panning = false;
-                break;   
-        }
-    }
-
-    function handleMouseMove(e, game) {
-        e.preventDefault();
-        game.controls.usingTouch = false;
-
-        const rect = game.gameContainer.getBoundingClientRect();
-        game.controls.mouseX = e.clientX - rect.left;
-        game.controls.mouseY = e.clientY - rect.top;
-
-        if (game.controls.movingView) {
-            game.camera.angleX += -1 / game.camera.slowness * (startMousePos[0] - e.clientX);
-            game.camera.angleY += 1 / game.camera.slowness * (startMousePos[1] - e.clientY);
-            game.correctAngles();
-        }
-        if (game.controls.panning) {
-            game.camera.test += -1 / game.camera.panSlowness * (startMousePos[1] - e.clientY);
-        }
-        startMousePos = [e.clientX, e.clientY];
-    }
-
-    function handleTouchStart(e, game) {
-        e.preventDefault();
-        game.controls.usingTouch = true;
-
-        game.controls.clicking = true;
-        window.addEventListener('touchend', game.handleTouchEnd);
-
-        const rect = game.gameContainer.getBoundingClientRect();
-        game.controls.mouseX = e.touches[0].clientX - rect.left;
-        game.controls.mouseY = e.touches[0].clientY - rect.top;
-
-        startMousePos = [e.touches[0].clientX, e.touches[0].clientY];
-    }
-
-    function handleTouchEnd(e, game) {
-        e.preventDefault();
-
-        game.controls.clicking = false;
-
-        window.removeEventListener('mouseup', game.handleTouchStart);
-    }
-
-    function handleTouchMove(e, game) {
-        e.preventDefault();
-
-        const rect = game.gameContainer.getBoundingClientRect();
-        game.controls.mouseX = e.touches[0].clientX - rect.left;
-        game.controls.mouseY = e.touches[0].clientY - rect.top;
-
-        if (game.controls.movingView) {
-            game.camera.angleX += -1 / game.camera.slowness * (startMousePos[0] - e.touches[0].clientX);
-            game.camera.angleY += 1 / game.camera.slowness * (startMousePos[1] - e.touches[0].clientY);
-            game.correctAngles();
-        }
-        startMousePos = [e.touches[0].clientX, e.touches[0].clientY];
-    }
-
-    function handleWheel(e, game) {
-        e.preventDefault();
-
-        if (!game.camera.orto) { // zoom only when in perspective view
-            const newZoom = game.camera.zoom * Math.pow(2, e.deltaY * 0.001);
-            game.camera.zoom = Math.max(game.camera.minZoom, Math.min(game.camera.maxZoom, newZoom));
-        }
-    }
 }
 
 export function getPosFromIndex(i, size) {

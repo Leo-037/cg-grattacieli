@@ -1,0 +1,117 @@
+html,
+body {
+    margin: 0;
+    padding: 0;
+    background-color: #2a2a2a;
+    font-family: 'Trebuchet MS', 'Lucida Sans Unicode', 'Lucida Grande', 'Lucida Sans', Arial, sans-serif;
+    color: #090404
+}
+
+#canvas-container {
+    margin: auto;
+    width: 100dvw;
+    height: 100dvh;
+    max-width: calc(100vh * 6/4);
+    max-height: calc(100vw * 4/6);
+}
+
+#canvas {
+    width: 100%;
+    height: 100%;
+    background-color: #ccccff;
+}
+
+.container {
+    position: relative;
+    display: flex;
+}
+
+#options {
+    background-color: rgba(0, 0, 0, 0);
+    display: flex;
+    flex-direction: column;
+    position: absolute;
+    color: white;
+    font-family: monospace;
+    font-size: 2cqmin;
+    padding: 5px;
+}
+
+.options-line {
+    flex: 1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-left: 0.5cqmin;
+    padding-right: 0.5cqmin;
+}
+
+.btn-description {
+    flex: 1;
+    text-align: left;
+}
+
+.options-button {
+    font-size: 2cqmin;
+    text-align: center;
+    height: 3cqmin;
+    width: 3cqmin;
+    padding: 0;
+}
+
+h1,
+h5 {
+    margin: 0;
+    padding: 0;
+}
+
+#overlay {
+    position: absolute;
+    left: 10px;
+    top: 10px;
+    background-color: rgba(0, 0, 0, 0.7);
+    color: white;
+    font-family: monospace;
+    padding: 1em;
+}
+
+#level-selector {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    text-align: center;
+    vertical-align: middle;
+    transform: translateX(-50%) translateY(-50%);
+    font-size: 4cqmin;
+}
+
+#levels {
+    font-size: 3cqmin;
+    padding: 10px;
+    margin: 5px;
+}
+
+.button {
+    font-size: 5cqmin;
+    padding: 10px;
+    border: 2px solid black;
+    background-color: #ffffff;
+    box-shadow: 0 8px 16px 0 rgba(0, 0, 0, 0.2), 0 6px 20px 0 rgba(0, 0, 0, 0.19);
+}
+
+.button:hover {
+    background-color: rgb(246, 200, 83);
+    /* color: #ffffff; */
+}
+
+#gameEndedInfo {
+    display: flex;
+    flex: 1;
+    justify-content: space-around;
+    align-items: center;
+    text-align: center;
+    color: rgb(197, 197, 252);
+    font-size: 4cqmin;
+    position: absolute;
+    z-index: 1;
+}

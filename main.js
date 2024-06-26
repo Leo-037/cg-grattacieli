@@ -3,7 +3,7 @@ import { levels } from "./levels.js";
 
 function main() {
     let startButton = $("#btnStartgame");
-    startGame()
+    // startGame()
     startButton.on("click touchstart tap", (e) => startGame());
 };
 

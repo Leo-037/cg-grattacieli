@@ -7,116 +7,7 @@
     <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1" />
 
     <title>Skyscrapers</title>
-
-    <style>
-        html,
-        body {
-            margin: 0;
-            padding: 0;
-            background-color: #2a2a2a;
-        }
-
-        #canvas-container {
-            margin: auto;
-            width: 100dvw;
-            height: 100dvh;
-            max-width: calc(100vh * 1.25);
-            max-height: calc(100vw * 0.8);
-        }
-
-        #canvas {
-            width: 100%;
-            height: 100%;
-            aspect-ratio: 5/4;
-            background-color: #ccccff;
-        }
-
-        .container {
-            position: relative;
-            display: flex;
-        }
-
-        #options {
-            background-color: rgba(0, 0, 0, 0);
-            display: flex;
-            flex-direction: column;
-            position: absolute;
-            color: white;
-            font-family: monospace;
-            font-size: 2cqmin;
-        }
-
-        .options-line {
-            flex: 1;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding-left: 0.5cqmin;
-            padding-right: 0.5cqmin;
-        }
-
-        .btn-description {
-            flex: 1;
-            text-align: left;
-        }
-
-        .options-button {
-            font-size: 2cqmin;
-            text-align: center;
-            height: 3cqmin;
-            width: 3cqmin;
-        }
-
-        #overlay {
-            position: absolute;
-            left: 10px;
-            top: 10px;
-            background-color: rgba(0, 0, 0, 0.7);
-            color: white;
-            font-family: monospace;
-            padding: 1em;
-        }
-
-        #level-selector {
-            position: absolute;
-            left: 50%;
-            top: 50%;
-            text-align: center;
-            vertical-align: middle;
-            transform: translateX(-50%) translateY(-50%);
-            font-size: 4cqmin;
-        }
-
-        #levels {
-            font-size: 3cqmin;
-            padding: 10px;
-            margin: 5px;
-        }
-
-        .button {
-            font-size: 5cqmin;
-            padding: 10px;
-            border: 2px solid black;
-            box-shadow: 0 8px 16px 0 rgba(0, 0, 0, 0.2), 0 6px 20px 0 rgba(0, 0, 0, 0.19);
-        }
-
-        .button:hover {
-            background-color: rgb(42, 97, 70);
-            color: #ffffff;
-        }
-
-        #gameEndedInfo {
-            display: flex;
-            flex: 1;
-            justify-content: space-around;
-            align-items: center;
-            text-align: center;
-            color: rgb(0, 225, 90);
-            font-size: 4cqmin;
-            position: absolute;
-            z-index: 1;
-        }
-    </style>
+    <link rel="stylesheet" type="text/css" href="styles.css">
 </head>
 
 <body>
@@ -124,13 +15,12 @@
         <div id="gameEndedInfo">
             <span>Level complete!</span>
             <button type="button" class="button" id="btnHome"><strong>Home</strong></button>
-            <!-- <button type="button" class="button" id="btnNextgame"><strong>Next level</strong></button> -->
         </div>
     </div>
 
     <div class="container">
         <div id="three-container" style="flex-grow: 1;" hidden></div>
-        <div id="canvas-container" hidden>
+        <div id="canvas-container">
             <canvas id="canvas">
                 HTML5 canvas not supported or not working!
             </canvas>
@@ -139,25 +29,29 @@
 
             <div id="selector-area">
                 <div id="level-selector" class="levelSelector">
+                    <div>
+                        <h1>SKYSCRAPERS</h1>
+                        <h5><i>by Leonardo Baraldi</i></h5>
+                    </div>
                     <h3>
-                        <label for="levels" style="color: #090404">Choose a level</label>
+                        <label for="levels">Choose a level</label>
                         <br>
                         <select name="levels" id="levels">
-                            <option value="3-1">3x3 - lvl 1 (tutorial)</option>
+                            <option value="3-1">3x3 - level 1 (tutorial)</option>
                             <option disabled>──────────</option>
-                            <option value="4-1">4x4 - lvl 1 (easy)</option>
-                            <option value="4-2">4x4 - lvl 2 (normal)</option>
-                            <option value="4-3">4x4 - lvl 3 (hard)</option>
+                            <option value="4-1">4x4 - level 1 (easy)</option>
+                            <option value="4-2">4x4 - level 2 (normal)</option>
+                            <option value="4-3">4x4 - level 3 (hard)</option>
                             <option disabled>──────────</option>
-                            <option value="5-1">5x5 - lvl 1 (easy)</option>
-                            <option value="5-2">5x5 - lvl 2 (normal)</option>
-                            <option value="5-3">5x5 - lvl 3 (normal)</option>
-                            <option value="5-4">5x5 - lvl 4 (hard)</option>
-                            <option value="5-5">5x5 - lvl 5 (hard)</option>
+                            <option value="5-1">5x5 - level 1 (easy)</option>
+                            <option value="5-2">5x5 - level 2 (normal)</option>
+                            <option value="5-3">5x5 - level 3 (normal)</option>
+                            <option value="5-4">5x5 - level 4 (hard)</option>
+                            <option value="5-5">5x5 - level 5 (hard)</option>
                             <option disabled>──────────</option>
-                            <option value="6-1">6x6 - lvl 1 (normal)</option>
-                            <option value="6-2">6x6 - lvl 2 (hard)</option>
-                            <option value="6-3">6x6 - lvl 3 (hard)</option>
+                            <option value="6-1">6x6 - level 1 (normal)</option>
+                            <option value="6-2">6x6 - level 2 (hard)</option>
+                            <option value="6-3">6x6 - level 3 (hard)</option>
                         </select>
                         <br><br>
                         <button type="button" class="button" id="btnStartgame"><strong>Start game</strong></button>
@@ -166,18 +60,16 @@
             </div>
         </div>
 
-        <div id="overlay" >
-            <div>AngleX: <span id="info-angleX"></span></div>
-            <div>AngleY: <span id="info-angleY"></span></div>
+        <div id="overlay" hidden>
             <div>Id: <span id="info-id"></span></div>
-            <div>Debug: <span id="info-extra"></span></div>
+            <div>Mouse: <span id="info-mouse"></span></div>
         </div>
     </div>
 
 
     <!-- SCRIPTS -->
 
-    <script id="simple-texture-vertex-shader-3d" type="x-shader/x-vertex">
+    <script id="texture-vertex-shader" type="x-shader/x-vertex">
 
         attribute vec4 a_position;
         attribute vec2 a_texcoord;
@@ -190,7 +82,6 @@
         varying vec3 v_normal;
 
         void main() {
-            // Multiply the position by the matrix.
             gl_Position = u_matrix * a_position;
 
             v_texcoord = a_texcoord;
@@ -198,10 +89,9 @@
         }
     </script>
 
-    <script id="simple-texture-fragment-shader-3d" type="x-shader/x-fragment">
+    <script id="texture-fragment-shader" type="x-shader/x-fragment">
         precision mediump float;
 
-        // Passed in from the vertex shader.
         varying vec2 v_texcoord;
         varying vec3 v_normal;
 
@@ -222,31 +112,29 @@
         }
     </script>
 
-
     <!---------------->
 
     <!-- vertex shader -->
-    <script id="pick-vertex-shader" type="x-shader/x-vertex">
-    attribute vec4 a_position;
-    
-    uniform mat4 u_viewProjection;
-    uniform mat4 u_world;
-    
-    void main() {
-      // Multiply the position by the matrices
-      gl_Position = u_viewProjection * u_world * a_position;
-    }
-  </script>
+    <script id="picking-vertex-shader" type="x-shader/x-vertex">
+        attribute vec4 a_position;
+        
+        uniform mat4 u_viewProjection;
+        uniform mat4 u_world;
+        
+        void main() {
+            gl_Position = u_viewProjection * u_world * a_position;
+        }
+    </script>
     <!-- fragment shader -->
-    <script id="pick-fragment-shader" type="x-shader/x-fragment">
-    precision mediump float;
-    
-    uniform vec4 u_id;
-    
-    void main() {
-       gl_FragColor = u_id;
-    }
-  </script>
+    <script id="picking-fragment-shader" type="x-shader/x-fragment">
+        precision mediump float;
+        
+        uniform vec4 u_id;
+        
+        void main() {
+            gl_FragColor = u_id;
+        }
+    </script>
 
     <!------------------>
 
@@ -254,7 +142,9 @@
         attribute vec4 a_position;
         attribute vec3 a_normal;
         
-        uniform mat4 projection, modelview, normalMat; // invert transpose
+        uniform mat4 projection;
+        uniform mat4 modelview;
+        uniform mat4 normalMat; 
         
         varying vec3 normalInterp;
         varying vec3 vertPos;
@@ -275,12 +165,11 @@
         varying vec3 vertPos;
 
         uniform int mode;   // 1 - normal, 2 - ambient, 3 - diffuse, 4 - specular
-        uniform float Ka;   // Ambient reflection coefficient
-        uniform float Kd;   // Diffuse reflection coefficient
-        uniform float Ks;   // Specular reflection coefficient
+        uniform float Ka;   // Ambient reflection
+        uniform float Kd;   // Diffuse reflection
+        uniform float Ks;   // Specular reflection
         uniform float shininessVal;
 
-        // Material color
         uniform vec3 ambientColor;
         uniform vec3 diffuseColor;
         uniform vec3 specularColor;
@@ -292,13 +181,13 @@
 
             vec3 N = normalize(normalInterp);
             vec3 L = normalize(lightPos - vertPos);
-            // Lambert's cosine law
+
             float lambertian = max(dot(N, L), 0.0);
             float specular = 0.0;
             if(lambertian > 0.0) {
                 vec3 R = reflect(-L, N);      // Reflected light vector
                 vec3 V = normalize(-vertPos); // Vector to viewer
-                // Compute the specular term
+
                 float specAngle = max(dot(R, V), 0.0);
                 specular = pow(specAngle, shininessVal);
             }
@@ -314,7 +203,6 @@
             if(mode == 4) color = vec4(Ks * specular * specularColor, 1.0);
 
             gl_FragColor = color * alpha;
-            // gl_FragColor = vec4(color.rgb, 1.0);
         }
     </script>
 

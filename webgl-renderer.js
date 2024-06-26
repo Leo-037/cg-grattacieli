@@ -2,7 +2,7 @@ import {
     cube_colors, cube_indices, cube_normals, cube_vertices, square_indices, square_normals, square_textcoords, square_vertices, plane_vertices, plane_normals, plane_indices,
 } from "./resources/objects/geometry.js";
 import { LoadMesh, degToRad, loadTexture } from "./libs/myutils.js"
-import { getPosFromIndex, CAMERA_N, CAMERA_E, CAMERA_S, CAMERA_W, colors } from "./grattacieli.js";
+import { Game, getPosFromIndex, CAMERA_N, CAMERA_E, CAMERA_S, CAMERA_W, colors } from "./grattacieli.js";
 
 const textureAtlasInfo = {
     size: 512,
@@ -34,11 +34,11 @@ const textureAtlasInfo = {
 const gameAreaColor = [0.8, 0.8, 1, 1];
 const minimapColor = [1, 0.8, 0.3, 1];
 const selectorColor = [0.2, 0.2, 0.2, 1];
-const extraColor = [0.3, 0.7, 0.5, 1];
+const extraColor = selectorColor;
 
 export const BIN = 5;
 
-export function WebGLRenderer(game) {
+export function WebGLRenderer(/** @type {Game} */ game) {
     $('#canvas-container').show();
 
     const gameEndedDiv = $('#gameEndedInfo');
@@ -51,7 +51,7 @@ export function WebGLRenderer(game) {
     }
 
     canvas.on('mousedown', (e) => handleMouseDown(e));
-    canvas.on('mousemove', (e) => handleMouseMove(e));
+    $('#canvas-container').on('mousemove', (e) => handleMouseMove(e));
 
     canvas.on('touchstart', (e) => handleTouchStart(e));
     canvas.on('touchmove', (e) => handleTouchMove(e));
@@ -61,19 +61,23 @@ export function WebGLRenderer(game) {
 
     // ------- BUFFERS -------
 
-    var skyscraperMeshData = [];
-    skyscraperMeshData.sourceMesh = 'resources/objects/skyscraper/skyscraper.obj';
-    var skyscraperMesh = LoadMesh(gl, skyscraperMeshData);
-
     var binMeshData = [];
-    binMeshData.sourceMesh = 'resources/objects//trashbin/bin.obj';
+    binMeshData.sourceMesh = 'resources/objects/trashbin/bin.obj';
     var binMesh = LoadMesh(gl, binMeshData);
 
-    const grattacieloBufferInfo = createBufferFromMesh(gl, skyscraperMesh);
+    const available_models = 6;
+    const skyscrapersBufferInfos = {};
+    for (let i = 1; i <= available_models; i++) {
+        let skyscraperMeshData = [];
+        skyscraperMeshData.sourceMesh = `resources/objects/skyscrapers/${i}.obj`;
+        let skyscraperMesh = LoadMesh(gl, skyscraperMeshData);
+        skyscrapersBufferInfos[i] = createBufferFromMesh(gl, skyscraperMesh);
+    }
+
     const binBufferInfo = createBufferFromMesh(gl, binMesh);
     const cubeBufferInfo = createCubeBufferInfo(gl);
 
-    const charactersBufferInfos = {}
+    const charactersBufferInfos = {};
     for (let i = 1; i <= game.size; i++) {
         charactersBufferInfos[i] = createCharacterBufferInfo(gl, i);
     }
@@ -92,8 +96,8 @@ export function WebGLRenderer(game) {
 
     // ------- PROGRAMS -------
 
-    const pickingProgramInfo = webglUtils.createProgramInfo(gl, ["pick-vertex-shader", "pick-fragment-shader"]);
-    const texturedProgramInfo = webglUtils.createProgramInfo(gl, ['simple-texture-vertex-shader-3d', 'simple-texture-fragment-shader-3d']);
+    const pickingProgramInfo = webglUtils.createProgramInfo(gl, ["picking-vertex-shader", "picking-fragment-shader"]);
+    const texturedProgramInfo = webglUtils.createProgramInfo(gl, ['texture-vertex-shader', 'texture-fragment-shader']);
     const solidColorProgramInfo = webglUtils.createProgramInfo(gl, ['solid-color-vertex-shader', 'solid-color-fragment-shader']);
 
     // ------- TEXTURES -------
@@ -139,6 +143,8 @@ export function WebGLRenderer(game) {
 
     gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depthBuffer);
 
+    // ------- SETUP OBJECTS -------
+
     class DrawableObject {
         constructor(buffer, id) {
             this.id = id;
@@ -155,7 +161,7 @@ export function WebGLRenderer(game) {
                 u_matrix: computeWorldViewProjection(this.projection, this.view, this.worldMatrix),
                 u_texture: texture,
                 u_worldInverseTranspose: m4.transpose(m4.inverse(this.worldMatrix)),
-                u_reverseLightDirection: m4.normalize([0, game.light.y, 0])
+                u_reverseLightDirection: m4.normalize([game.light.x, game.light.y, game.light.z])
             })
         }
 
@@ -168,7 +174,7 @@ export function WebGLRenderer(game) {
         }
     }
 
-    class Tile extends DrawableObject {
+    class Tile3D extends DrawableObject {
         constructor(x, z, id) {
             super(tileBufferInfos.tile, id)
             this.x = x;
@@ -196,12 +202,12 @@ export function WebGLRenderer(game) {
                 u_matrix: computeWorldViewProjection(this.projection, this.view, this.worldMatrix),
                 u_texture: textureAtlas,
                 u_worldInverseTranspose: m4.transpose(m4.inverse(this.worldMatrix)),
-                u_reverseLightDirection: m4.normalize([0, game.light.y, 0])
+                u_reverseLightDirection: m4.normalize([game.light.x, game.light.y, game.light.z])
             });
         }
     }
 
-    class Square extends Tile {
+    class Lot3D extends Tile3D {
         constructor(lot, id) {
             super(lot.x, lot.z, id);
             this.lot = lot;
@@ -218,13 +224,14 @@ export function WebGLRenderer(game) {
 
         skyscraperTransform(height) {
             let worldMatrix = m4.translate(m4.identity(), this.x, height, this.z);
-            worldMatrix = m4.scale(worldMatrix, .9, height, .9);
+            worldMatrix = m4.scale(worldMatrix, height * .9, height, height * .9);
+
             return worldMatrix;
         }
 
         drawSkyscraper(skyscraper, ambient, diffuse, transparent, lightPos) {
             const worldMatrix = this.skyscraperTransform(skyscraper);
-            drawObject(solidColorProgramInfo, grattacieloBufferInfo, {
+            drawObject(solidColorProgramInfo, skyscrapersBufferInfos[skyscraper], {
                 projection: m4.multiply(this.projection, this.view),
                 modelview: worldMatrix,
                 normalMat: m4.transpose(m4.inverse(worldMatrix)),
@@ -240,7 +247,7 @@ export function WebGLRenderer(game) {
 
         drawSkyscraperForPicking() {
             const worldMatrix = this.skyscraperTransform(this.skyscraper);
-            drawObject(pickingProgramInfo, grattacieloBufferInfo, {
+            drawObject(pickingProgramInfo, skyscrapersBufferInfos[this.skyscraper], {
                 u_world: worldMatrix,
                 u_id: getId(this.id + game.board.length),
                 u_viewProjection: m4.multiply(this.projection, this.view),
@@ -264,7 +271,7 @@ export function WebGLRenderer(game) {
         }
     }
 
-    class OuterNumber extends Tile {
+    class Objective3D extends Tile3D {
         constructor(objective) {
             super(objective.x, objective.z, -1);
             this.objective = objective;
@@ -289,11 +296,9 @@ export function WebGLRenderer(game) {
         }
     }
 
-    // ------- SETUP OBJECTS -------
-
-    const board = game.board.map((s, i) => new Square(s, i + 1))
-    const numbersAround = game.numbersAround.map((s) => new OuterNumber(s));
-    const corners = game.corners.map((s) => new OuterNumber(s));
+    const board = game.board.map((s, i) => new Lot3D(s, i + 1))
+    const numbersAround = game.numbersAround.map((s) => new Objective3D(s));
+    const corners = game.corners.map((s) => new Objective3D(s));
 
     // ------- RENDERING -------
 
@@ -307,10 +312,10 @@ export function WebGLRenderer(game) {
         webglUtils.drawBufferInfo(gl, bufferInfo, gl.TRIANGLES);
     }
 
-    function drawScene(projectionMatrix, viewMatrix, tileRotation, minimap = false) {
+    function drawBoard(projectionMatrix, viewMatrix, tileRotation, minimap = false) {
         gl.enable(gl.BLEND);
 
-        numbersAround.forEach((/** @type OuterNumber */num) => {
+        numbersAround.forEach((/** @type Objective3D */num) => {
             let rotation = game.options.rotateNumbers.value || minimap ? tileRotation : num.rotation;
             let outerRingTransform = m4.yRotate(m4.identity(), degToRad(rotation))
             if (!minimap && game.camera.orto) {
@@ -338,7 +343,7 @@ export function WebGLRenderer(game) {
             })
         }
 
-        board.forEach((/** @type Square */ square) => {
+        board.forEach((/** @type Lot3D */ square) => {
             square.drawTextured(viewMatrix, projectionMatrix);
 
             let skyscraper;
@@ -368,7 +373,7 @@ export function WebGLRenderer(game) {
 
             if (skyscraper > 0) {
                 const cameraPos = game.getCameraPos();
-                const lightPos = minimap ? [square.x, 20, square.z] : [cameraPos[0], 8, cameraPos[2]];
+                const lightPos = minimap ? [square.x, 20, square.z] : [cameraPos[0] + game.light.x, 8, cameraPos[2] + game.light.z];
                 square.drawSkyscraper(skyscraper, Ka, Kd, transparent, lightPos);
                 if (minimap) {
                     square.drawNumber(skyscraper);
@@ -383,7 +388,6 @@ export function WebGLRenderer(game) {
     let minimapWidth, minimapHeight, minimapAspect, minimapX, minimapY;
     let selectorWidth, selectorHeight, selectorAspect, selectorX, selectorY;
     let extraWidth, extraHeight, extraAspect, extraX, extraY;
-    let minimapMargin = 0;
 
     let lastRotation = 0;
 
@@ -406,38 +410,36 @@ export function WebGLRenderer(game) {
         if (webglUtils.resizeCanvasToDisplaySize(gl.canvas)) {
             setFramebufferAttachmentSizes(gl.canvas.width, gl.canvas.height);
 
-            gameareaHeight = Math.ceil(gl.canvas.height * (4 / 5));
-            gameareaWidth = gameareaHeight; // gl.canvas.width * (2 / 3);
+            gameareaHeight = Math.ceil(gl.canvas.height * (5 / 7));
+            gameareaWidth = Math.ceil(gl.canvas.width * (2 / 3));
             gameareaAspect = gameareaWidth / gameareaHeight;
             gameareaX = 0;
             gameareaY = gl.canvas.height - gameareaHeight;
 
-            selectorWidth = gl.canvas.width;
+            minimapWidth = gl.canvas.width - gameareaWidth;
+            minimapHeight = minimapWidth;
+            minimapAspect = minimapWidth / minimapHeight;
+            minimapX = gl.canvas.width - minimapWidth;
+            minimapY = gl.canvas.height - minimapHeight;
+
+            selectorWidth = gl.canvas.width - minimapWidth;
             selectorHeight = gl.canvas.height - gameareaHeight;
             selectorAspect = selectorWidth / selectorHeight;
             selectorX = 0;
             selectorY = 0;
 
-            minimapMargin = 1 / 50 * gameareaWidth;
-
-            minimapWidth = gl.canvas.width - gameareaWidth - minimapMargin * 2;
-            minimapHeight = minimapWidth;
-            minimapAspect = minimapWidth / minimapHeight;
-            minimapX = gl.canvas.width - minimapMargin - minimapWidth;
-            minimapY = selectorHeight + minimapMargin;
-
-            extraWidth = minimapWidth;
-            extraHeight = gl.canvas.height - minimapHeight - selectorHeight - minimapMargin * 3;
+            extraWidth = gl.canvas.width - selectorWidth;
+            extraHeight = gl.canvas.height - minimapHeight;
             extraAspect = extraWidth / extraHeight;
             extraX = minimapX;
-            extraY = selectorHeight + minimapHeight + minimapMargin * 2;
+            extraY = 0;
         }
 
         optionsDiv.css({
             left: canvas[0].getBoundingClientRect().x + extraX,
-            top: minimapMargin,
-            "width": extraWidth,
-            "height": extraHeight
+            top: minimapHeight,
+            "width": extraWidth - 10,
+            "height": extraHeight - 10
         });
 
         if (!game.playing) {
@@ -465,21 +467,21 @@ export function WebGLRenderer(game) {
 
         let projectionMatrix = game.camera.orto || game.options.orthographic.value ?
             m4.orthographic(
-                -game.orto.gameareaCamOrthoUnits,  // left
-                game.orto.gameareaCamOrthoUnits,   // right
-                -game.orto.gameareaCamOrthoUnits,                   // bottom
-                game.orto.gameareaCamOrthoUnits,                    // top
+                -game.orto.gameareaCamOrthoUnits * gameareaAspect,  // left
+                game.orto.gameareaCamOrthoUnits * gameareaAspect,   // right
+                -game.orto.gameareaCamOrthoUnits,  // bottom
+                game.orto.gameareaCamOrthoUnits,   // top
                 game.orto.cam1Near,
                 game.orto.cam1Far) :
             m4.perspective(degToRad(game.camera.fov), gameareaAspect, game.camera.near, game.camera.far);
 
+        const up = [0, 1, 0];
         const cameraPosition = game.getCameraPos();
         const target = [0, game.camera.y, 0];
-        const up = [0, 1, 0];
         const cameraMatrix = m4.lookAt(cameraPosition, target, up);
         const viewMatrix = m4.inverse(cameraMatrix);
 
-        board.forEach((/**@type Square*/ square) => {
+        board.forEach((/**@type Lot3D*/ square) => {
             square.drawForPicking(projectionMatrix, viewMatrix);
             if (square.skyscraper > 0) {
                 square.drawSkyscraperForPicking();
@@ -492,19 +494,20 @@ export function WebGLRenderer(game) {
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
         const minimapCameraPosition = [0, 20, 0];
-        const minimapCameraMatrix = m4.lookAt(minimapCameraPosition, [0, -game.orto.cam1Far, -1], up);
+        const minimapTarget = [0, -game.orto.cam1Far, -1];
+        const minimapCameraMatrix = m4.lookAt(minimapCameraPosition, minimapTarget, up);
         const minimapViewMatrix = m4.inverse(minimapCameraMatrix);
 
         const minimapProjectionMatrix =
             m4.orthographic(
-                -game.orto.minimapCamOrthoUnits,  // left
-                game.orto.minimapCamOrthoUnits,   // right
-                -game.orto.minimapCamOrthoUnits,                  // bottom
-                game.orto.minimapCamOrthoUnits,                   // top
+                -game.orto.minimapCamOrthoUnits * minimapAspect,  // left
+                game.orto.minimapCamOrthoUnits * minimapAspect,   // right
+                -game.orto.minimapCamOrthoUnits,  // bottom
+                game.orto.minimapCamOrthoUnits,   // top
                 game.orto.cam1Near,
                 game.orto.cam1Far);
 
-        board.forEach((/**@type Square*/ square) => {
+        board.forEach((/**@type Lot3D*/ square) => {
             square.drawForPicking(minimapProjectionMatrix, minimapViewMatrix);
             if (square.skyscraper > 0) {
                 square.drawSkyscraperForPicking();
@@ -540,7 +543,8 @@ export function WebGLRenderer(game) {
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
         const selectorCameraPosition = [0, 0, 5];
-        const selectorCameraMatrix = m4.lookAt(selectorCameraPosition, [0, 0, 0], up);
+        const selectorTarget = [0, 0, 0];
+        const selectorCameraMatrix = m4.lookAt(selectorCameraPosition, selectorTarget, up);
         const selectorViewMatrix = m4.inverse(selectorCameraMatrix);
 
         const selectorProjectionMatrix =
@@ -554,19 +558,19 @@ export function WebGLRenderer(game) {
 
         const selectorViewProjectionMatrix = m4.multiply(selectorProjectionMatrix, selectorViewMatrix);
 
-        let n, size, radius, occupiedSpace, nSpaces, width, spacing, xOffset, yOffset, binSize, binHeight;
+        let n, radius, occupiedSpace, nSpaces, width, spacing, xOffset, yOffset, binSize, binHeight;
 
         if (game.playing) {
             n = game.size + 1; // all skyscrapers + the bin
-            size = 1.5;
-            radius = Math.sqrt(2 * (size ** 2)); // the size of the diagonal of the skyscrapers
+
+            radius = Math.sqrt(2); // the size of the diagonal of the skyscrapers
             occupiedSpace = 2 * radius * n; // the space taken up by all skyscrapers
             nSpaces = n + 1; // the number of spaces between the objects
             width = 2 * (1 / selectorProjectionMatrix[0]); // width of the selector in scene coordinates
 
             spacing = ((width - occupiedSpace) / nSpaces); // the distance between objects
             xOffset = - width / 2 + radius; // the starting point to draw the row
-            yOffset = -(game.size * size) / 2;
+            yOffset = -game.size;
 
             binSize = 2;
             binHeight = 3;
@@ -575,15 +579,15 @@ export function WebGLRenderer(game) {
             for (let i = 1; i < n; i++) {
                 const height = i;
                 const xPos = xOffset + spacing * (i) + 2 * radius * (i - 1);
-                const yPos = yOffset + (height / size);
+                const yPos = yOffset + height;
 
                 let worldMatrix = m4.identity();
                 worldMatrix = m4.translate(worldMatrix, xPos, yPos, -40);
-                worldMatrix = m4.xRotate(worldMatrix, degToRad(45));
+                worldMatrix = m4.xRotate(worldMatrix, degToRad(15));
                 worldMatrix = m4.yRotate(worldMatrix, degToRad(45));
-                worldMatrix = m4.scale(worldMatrix, size, height, size);
+                worldMatrix = m4.scale(worldMatrix, height, height, height);
 
-                drawObject(pickingProgramInfo, grattacieloBufferInfo, {
+                drawObject(pickingProgramInfo, skyscrapersBufferInfos[height], {
                     u_world: worldMatrix,
                     u_id: getId(2 * board.length + height),
                     u_viewProjection: selectorViewProjectionMatrix,
@@ -593,7 +597,7 @@ export function WebGLRenderer(game) {
             // the bin
             {
                 const xPos = xOffset + spacing * (n) + 2 * radius * (n - 1);
-                const yPos = yOffset + binHeight / binSize;
+                const yPos = -(binHeight / binSize) / 2;
                 let worldMatrix = m4.identity();
                 worldMatrix = m4.translate(worldMatrix, xPos, yPos, -40);
                 worldMatrix = m4.xRotate(worldMatrix, degToRad(15));
@@ -648,7 +652,7 @@ export function WebGLRenderer(game) {
         }
         lastRotation = rotation;
 
-        drawScene(projectionMatrix, viewMatrix, rotation)
+        drawBoard(projectionMatrix, viewMatrix, rotation)
 
         // ------- Draw the minimap -------
 
@@ -657,7 +661,7 @@ export function WebGLRenderer(game) {
         gl.clearColor(...minimapColor);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-        drawScene(minimapProjectionMatrix, minimapViewMatrix, 90, true)
+        drawBoard(minimapProjectionMatrix, minimapViewMatrix, 90, true)
 
         function drawDirectionSquare(worldMatrix, dir) {
             worldMatrix = m4.yRotate(worldMatrix, degToRad(90));
@@ -666,7 +670,7 @@ export function WebGLRenderer(game) {
                 u_matrix: computeWorldViewProjection(minimapProjectionMatrix, minimapViewMatrix, worldMatrix),
                 u_texture: textureAtlas,
                 u_worldInverseTranspose: m4.transpose(m4.inverse(worldMatrix)),
-                u_reverseLightDirection: m4.normalize([0, game.light.y, 0])
+                u_reverseLightDirection: m4.normalize([game.light.x, game.light.y, game.light.z])
             });
         }
 
@@ -704,25 +708,25 @@ export function WebGLRenderer(game) {
             for (let i = 1; i < n; i++) {
                 const height = i;
                 const xPos = xOffset + spacing * (i) + 2 * radius * (i - 1);
-                const yPos = yOffset + (height / size);
+                const yPos = yOffset + height;
 
                 let worldMatrix = m4.identity();
                 worldMatrix = m4.translate(worldMatrix, xPos, yPos, -40);
-                worldMatrix = m4.xRotate(worldMatrix, degToRad(45));
+                worldMatrix = m4.xRotate(worldMatrix, degToRad(15));
                 worldMatrix = m4.yRotate(worldMatrix, degToRad(45));
-                worldMatrix = m4.scale(worldMatrix, size, height, size);
+                worldMatrix = m4.scale(worldMatrix, height, height, height);
 
-                let Ka = .6, Kd = .8;
+                let Ka = game.light.selectorKa, Kd = game.light.selectorKd;
                 if (board.filter(s => s.skyscraper === height).length >= game.size) {
                     Ka = .2;
                     Kd = .4;
                 }
-                if (height === id - 2 * board.length && !game.controls.movingView) {
+                if (selectedSkyscraper === height || (height === id - 2 * board.length && !game.controls.movingView && !game.controls.holding)) {
                     Ka += .4;
                     Kd += .2;
                 }
 
-                drawObject(solidColorProgramInfo, grattacieloBufferInfo, {
+                drawObject(solidColorProgramInfo, skyscrapersBufferInfos[height], {
                     projection: m4.multiply(selectorProjectionMatrix, selectorViewMatrix),
                     modelview: worldMatrix,
                     normalMat: m4.transpose(m4.inverse(worldMatrix)),
@@ -731,23 +735,23 @@ export function WebGLRenderer(game) {
                     ambientColor: colors[height], diffuseColor: colors[height],
                     specularColor: [1, 1, 1],
                     alpha: 1.0,
-                    lightPos: [xPos - spacing / 2, yPos, 0],
+                    lightPos: [xPos + game.light.selectorX, yPos, 0],
                 });
 
                 if (game.options.showRemaining.value) {
                     let remaining = game.size - game.placed[height];
                     if (remaining > 0) {
-                        worldMatrix = m4.translate(m4.identity(), xPos, -n / 2, 0);;
-                        worldMatrix = m4.xRotate(worldMatrix, degToRad(90))
-                        worldMatrix = m4.yRotate(worldMatrix, degToRad(90))
-                        worldMatrix = m4.scale(worldMatrix, size, size, size);
+                        worldMatrix = m4.translate(m4.identity(), xPos, yPos - height + 0.8, 0);
+                        worldMatrix = m4.xRotate(worldMatrix, degToRad(90));
+                        worldMatrix = m4.yRotate(worldMatrix, degToRad(90));
+                        worldMatrix = m4.scale(worldMatrix, 1.5, 1.5, 1.5);
 
                         gl.enable(gl.BLEND)
                         drawObject(texturedProgramInfo, charactersBufferInfos[remaining], {
                             u_matrix: computeWorldViewProjection(selectorProjectionMatrix, selectorViewMatrix, worldMatrix),
                             u_texture: textureAtlas,
                             u_worldInverseTranspose: m4.transpose(m4.inverse(worldMatrix)),
-                            u_reverseLightDirection: m4.normalize([0, game.light.y, 0])
+                            u_reverseLightDirection: m4.normalize([game.light.x, game.light.y, game.light.z])
                         });
                         gl.disable(gl.BLEND)
                     }
@@ -757,14 +761,14 @@ export function WebGLRenderer(game) {
             // the bin
             {
                 const xPos = xOffset + spacing * (n) + 2 * radius * (n - 1);
-                const yPos = yOffset + binHeight / binSize;
+                const yPos = -(binHeight / binSize) / 2;
                 let worldMatrix = m4.identity();
                 worldMatrix = m4.translate(worldMatrix, xPos, yPos, -40);
                 worldMatrix = m4.xRotate(worldMatrix, degToRad(15));
                 worldMatrix = m4.yRotate(worldMatrix, degToRad(45));
                 worldMatrix = m4.scale(worldMatrix, binSize, binSize, binSize);
-                let Ka = .6, Kd = .8;
-                if (extraLookedAt === BIN) {
+                let Ka = game.light.selectorKa, Kd = game.light.selectorKd;
+                if (extraLookedAt === BIN && game.controls.holding && selectedSquare != null && selectedSkyscraper === 0) {
                     Ka += .4;
                     Kd += .2;
                 }
@@ -778,7 +782,7 @@ export function WebGLRenderer(game) {
                     ambientColor: binColor, diffuseColor: binColor,
                     specularColor: [1, 1, 1],
                     alpha: 1.0,
-                    lightPos: [xPos - spacing / 2, yPos, 0],
+                    lightPos: [xPos, yPos, 0],
                 })
             }
         }
@@ -792,11 +796,13 @@ export function WebGLRenderer(game) {
 
         // ------------------------------------------------
 
+        if (game.controls.holding && (selectedSkyscraper > 0 || selectedSquare != null)) {
+            document.body.style.cursor = "grabbing";
+        }
+
         // set the info nodes
-        angleXNode.nodeValue = game.camera.angleX.toFixed(1);
-        angleYNode.nodeValue = game.camera.angleY.toFixed(1);
-        idNode.nodeValue = `${id} / click ${game.controls.clicking} / hold ${game.controls.holding}`;
-        extraNode.nodeValue = `test: ${game.camera.test}, y: ${game.camera.y}`;
+        idNode.nodeValue = `${id}`;
+        mouseNode.nodeValue = `${game.controls.mouseX}, ${game.controls.mouseY}`;
 
         requestAnimationFrame(render);
     }
@@ -805,6 +811,7 @@ export function WebGLRenderer(game) {
 
     function lookingAt(id) {
         function lookingAtCamera(dir) {
+            document.body.style.cursor = "pointer";
             extraLookedAt = dir;
             if (game.controls.clicking) {
                 game.setSnap(dir);
@@ -813,7 +820,8 @@ export function WebGLRenderer(game) {
 
         // restore
         if (oldPickId >= 0) {
-            /**@type Square*/
+            document.body.style.cursor = "auto";
+            /**@type Lot3D*/
             let square;
             if (oldPickId <= board.length) {
                 square = board.filter(s => s.id === oldPickId)[0]
@@ -831,13 +839,15 @@ export function WebGLRenderer(game) {
         // object under mouse
         if (id > 0 && !game.controls.movingView && game.playing) {
             oldPickId = id;
-            /**@type Square*/
+            /**@type Lot3D*/
             let square;
             if (id <= board.length) { // looking at a square
                 square = board.filter(s => s.id === id)[0]
             } else if (id > board.length && id <= 2 * board.length) { // looking at a skyscraper
+                document.body.style.cursor = "grab";
                 square = board.filter(s => s.id + board.length === id)[0]
             } else if (id > 2 * board.length && id <= selectorIdOffset) { // skyscraper in the selector
+                document.body.style.cursor = "grab";
                 if (selectedSkyscraper === 0 && game.controls.clicking && !game.controls.holding) {
                     game.controls.holding = true;
                     selectedSkyscraper = id - 2 * board.length;
@@ -916,6 +926,14 @@ export function WebGLRenderer(game) {
             game.check();
 
         } else {
+            if (game.controls.mouseX <= gameareaWidth && game.controls.mouseY <= gameareaHeight) {
+                document.body.style.cursor = "move";
+                if (game.controls.clicking && !game.controls.holding) {
+                    game.controls.movingView = true;
+                }
+            } else {
+                document.body.style.cursor = "auto";
+            }
             if (!game.controls.clicking) {
                 game.controls.movingView = false;
                 if (game.controls.holding) {
@@ -929,15 +947,9 @@ export function WebGLRenderer(game) {
                     selectedSkyscraper = 0;
                 }
             }
-            if (game.controls.clicking && !game.controls.holding && insideRegion(game.controls.mouseX, game.controls.mouseY, gameareaX, gameareaY, gameareaWidth, gameareaHeight)) {
-                game.controls.movingView = true;
-            }
+
             extraLookedAt = 0;
         }
-    }
-
-    function insideRegion(x, y, startX, startY, endX, endY) {
-        return (x >= startX && x <= endX && y >= startY && y <= endY);
     }
 
     function getBooleanSymbol(value) {
@@ -947,7 +959,7 @@ export function WebGLRenderer(game) {
     for (const [k, option] of Object.entries(game.options)) {
         const toggle = () => {
             option.toggle();
-            $(`#${k}`).text(getBooleanSymbol(option.value)).css('color', option.value ? 'green' : 'red');
+            $(`#${k}`).text(getBooleanSymbol(option.value)).css('color', option.value ? 'blue' : 'red');
         };
         optionsDiv.append(
             $('<div/>', { "class": "options-line" })
@@ -959,23 +971,17 @@ export function WebGLRenderer(game) {
                         type: "button",
                         text: getBooleanSymbol(option.value),
                         on: { click: toggle, tap: toggle },
-                    }).css('color', option.value ? 'green' : 'red')
+                    }).css('color', option.value ? 'blue' : 'red')
                 ])
         );
     }
     optionsDiv.show();
 
     // Debug text nodes
-    var angleXNode = document.createTextNode("");
-    var angleYNode = document.createTextNode("");
     var idNode = document.createTextNode("");
-    var extraNode = document.createTextNode("");
-
-    // Add them to the debug overlay
-    document.querySelector("#info-angleX").appendChild(angleXNode);
-    document.querySelector("#info-angleY").appendChild(angleYNode);
     document.querySelector("#info-id").appendChild(idNode);
-    document.querySelector("#info-extra").appendChild(extraNode);
+    var mouseNode = document.createTextNode("");
+    document.querySelector("#info-mouse").appendChild(mouseNode);
 
     let startMousePos = [-1, -1];
 
@@ -1042,23 +1048,21 @@ export function WebGLRenderer(game) {
         game.controls.mouseX = e.clientX - rect.left;
         game.controls.mouseY = e.clientY - rect.top;
 
-        if (game.controls.movingView) {
+        if (game.controls.movingView || game.controls.panning) {
             game.camera.angleX += -1 / game.camera.slowness * (startMousePos[0] - e.clientX);
             game.camera.angleY += 1 / game.camera.slowness * (startMousePos[1] - e.clientY);
             game.correctAngles();
         }
-        if (game.controls.panning) {
-            game.camera.test += -1 / game.camera.panSlowness * (startMousePos[1] - e.clientY);
-        }
+
         startMousePos = [e.clientX, e.clientY];
     }
 
-    function handleTouchStart(e, game) {
+    function handleTouchStart(e) {
         e.preventDefault();
         game.controls.usingTouch = true;
 
         game.controls.clicking = true;
-        window.addEventListener('touchend', game.handleTouchEnd);
+        window.addEventListener('touchend', (e) => handleTouchEnd(e));
 
         const rect = canvas[0].getBoundingClientRect();
         game.controls.mouseX = e.touches[0].clientX - rect.left;
@@ -1072,7 +1076,7 @@ export function WebGLRenderer(game) {
 
         game.controls.clicking = false;
 
-        window.removeEventListener('mouseup', game.handleTouchStart);
+        window.removeEventListener('mouseup', handleTouchStart);
     }
 
     function handleTouchMove(e) {
@@ -1093,8 +1097,8 @@ export function WebGLRenderer(game) {
     function handleWheel(e) {
         e.preventDefault();
 
-        if (!game.camera.orto) { // zoom only when in perspective view
-            const newZoom = game.camera.zoom * Math.pow(2, e.deltaY * 0.001);
+        if (!game.camera.orto && !game.options.orthographic) { // zoom only when in perspective view
+            const newZoom = game.camera.zoom * Math.pow(2, e.originalEvent.deltaY * 0.001);
             game.camera.zoom = Math.max(game.camera.minZoom, Math.min(game.camera.maxZoom, newZoom));
         }
     }
@@ -1102,7 +1106,6 @@ export function WebGLRenderer(game) {
     game.playing = true;
     requestAnimationFrame(render);
 }
-
 
 
 function followSquarePath(centerX, centerY, size, deg) {
@@ -1132,9 +1135,9 @@ function followSquarePath(centerX, centerY, size, deg) {
     var xFactor = 1, yFactor = 1;
 
     switch (region) {
-        case 1: yFactor = -1; break;
+        case 1:
         case 2: yFactor = -1; break;
-        case 3: xFactor = -1; break;
+        case 3:
         case 4: xFactor = -1; break;
     }
 

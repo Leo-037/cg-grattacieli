@@ -1097,7 +1097,7 @@ export function WebGLRenderer(/** @type {Game} */ game) {
     function handleWheel(e) {
         e.preventDefault();
 
-        if (!game.camera.orto && !game.options.orthographic) { // zoom only when in perspective view
+        if (!game.camera.orto && !game.options.orthographic.value) { // zoom only when in perspective view
             const newZoom = game.camera.zoom * Math.pow(2, e.originalEvent.deltaY * 0.001);
             game.camera.zoom = Math.max(game.camera.minZoom, Math.min(game.camera.maxZoom, newZoom));
         }

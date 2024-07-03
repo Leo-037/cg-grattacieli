@@ -84,7 +84,7 @@ export class Game {
         selectorCamOrthoUnits: 0,
     }
     light = {
-        x: 0, y: 10, z: 0,
+        x: 8, y: 10, z: 0,
         mode: 1, // 1 - all, 2 - ambient, 3 - diffuse, 4 - specular
         Ka: 0.7, Kd: .35, Ks: 0,
         shininessVal: 80,
@@ -106,7 +106,7 @@ export class Game {
         this.size = settings.boardSize;
         this.disposition = settings.disposition;
         /** @type Lot[] */ this.board = [];
-        /** @type Objective[] */ this.numbersAround = []; //TODO: possono essere accorpati alla board?
+        /** @type Objective[] */ this.numbersAround = [];
         /** @type Tile[] */ this.corners = [];
         this.placed = {};
         this.playing = false;
@@ -125,7 +125,6 @@ export class Game {
                 for (var xx = 0; xx < this.size; ++xx) {
                     var x = getPosFromIndex(xx, this.size);
                     this.board.push(new Lot(x, z));
-                    // id += 1; // TODO: servono ancora gli id?
                 }
             }
         }
@@ -345,10 +344,8 @@ export function play(settings, gameEndedCallback) {
     lightFolder.add(game.light, 'selectorKd', 0, 1).step(0.01);
 
 
+    ThreejsRenderer(game, gui);
     WebGLRenderer(game);
-
-    // ThreejsRenderer(game);
-
 }
 
 export function getPosFromIndex(i, size) {

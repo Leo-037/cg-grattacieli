@@ -7,6 +7,16 @@ body {
     color: #090404
 }
 
+.container {
+    position: relative;
+    display: flex;
+}
+
+#three-container {
+    width: 80%;
+    max-width: 80%;
+}
+
 #canvas-container {
     margin: auto;
     width: 100dvw;
@@ -19,11 +29,6 @@ body {
     width: 100%;
     height: 100%;
     background-color: #ccccff;
-}
-
-.container {
-    position: relative;
-    display: flex;
 }
 
 #options {
